@@ -79,7 +79,6 @@ class Single:
                 frames += 1
 
                 if frames % log_interval == 0 and len(lr_things) > 0:
-                    print(frames)
                     actor_loss, critic_loss, entropy, debug = zip(*lr_things)
                     log(eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, beg, debug)
                     lr_things = []

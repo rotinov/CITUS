@@ -92,23 +92,20 @@ class PPO:
         states, actions, nstates, rewards, dones, outs = zip(*data)
         old_log_probs, old_vals = zip(*outs)
 
-        t_state_old_vals = torch.FloatTensor(old_vals)
+        n_state_old_vals = numpy.array(old_vals)
         t_nstates = torch.FloatTensor(nstates)
-        t_rewards = torch.FloatTensor(rewards)
-        t_dones = torch.FloatTensor(dones)
+        n_rewards = numpy.array(rewards)
+        n_dones = numpy.array(dones)
 
-        t_new_state_vals = self.nn(t_nstates)[1].detach().squeeze(-1)
-
-        # Making target for value update and for td residual
-        t_target_state_vals = t_rewards + self.gamma * (1 - t_dones) * t_new_state_vals
+        n_new_state_vals = self.nn(t_nstates)[1].detach().squeeze(-1).cpu().numpy()
 
         # Making td residual
-        td_residual = - t_state_old_vals + t_target_state_vals
+        td_residual = - n_state_old_vals + n_rewards + self.gamma * (1. - n_dones) * n_new_state_vals
 
         # Making GAE from td residual
-        t_advs = list(self._gae(td_residual, t_dones).detach().cpu().numpy())
+        n_advs = list(self._gae(td_residual, n_dones))
 
-        transitions = (states, actions, nstates, rewards, dones, old_log_probs, old_vals, t_advs)
+        transitions = (states, actions, nstates, rewards, dones, old_log_probs, old_vals, n_advs)
 
         return list(zip(*transitions))
 
@@ -133,7 +130,7 @@ class PPO:
         t_new_state_vals = self.nn(t_nstates)[1].detach().squeeze(-1)
 
         # Making target for value update and for td residual
-        t_target_state_vals = t_rewards + self.gamma * (1 - t_dones) * t_new_state_vals
+        t_target_state_vals = t_rewards + self.gamma * (1. - t_dones) * t_new_state_vals
 
         # Making critic losses
         t_state_vals_clipped = t_state_old_vals + torch.clamp(t_state_vals - t_state_old_vals, - self.cliprange, self.cliprange)
@@ -191,6 +188,6 @@ class PPO:
 
     def _gae(self, td_residual, dones):
         for i in reversed(range(td_residual.shape[0] - 1)):
-            td_residual[i] += self.lam * self.gamma * (1 - dones[i]) * td_residual[i+1]
+            td_residual[i] += self.lam * self.gamma * (1. - dones[i]) * td_residual[i+1]
 
         return td_residual
