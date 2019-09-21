@@ -33,8 +33,6 @@ def classic_policy(x, y):
 def classic_value(x):
     return nn.Sequential(nn.Linear(x, 64),
                          nn.Tanh(),
-                         nn.Linear(64, 64),
-                         nn.Tanh(),
                          nn.Linear(64, 1))
 
 

@@ -1,3 +1,6 @@
+import torch
+
+
 class BaseBuffer(object):
     def append(self, transition):
         pass
@@ -13,11 +16,16 @@ class BaseBuffer(object):
 
 
 class BaseAlgo:
+    _nn: torch.nn.Module
+
     def __call__(self, state):
         pass
 
-    def experience(self, transition, timestep_now):
+    def experience(self, transition):
         pass
 
-    def learn(self, input, timestep_now):
+    def learn(self, data):
+        pass
+
+    def update(self, from_agent):
         pass

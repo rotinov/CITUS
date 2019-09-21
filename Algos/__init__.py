@@ -47,9 +47,9 @@ class PPO(base.BaseAlgo):
 
         self.nn_type = nn
 
-        self.nn = nn(observation_space, action_space, simple=cnfg['simple_nn'])
+        self._nn = nn(observation_space, action_space, simple=cnfg['simple_nn'])
 
-        print(self.nn)
+        print(self._nn)
 
         self.gamma = cnfg['gamma']
         self.learning_rate = cnfg['learning_rate']
@@ -63,9 +63,9 @@ class PPO(base.BaseAlgo):
         self.noptepochs = cnfg['noptepochs']
         self.max_grad_norm = cnfg['max_grad_norm']
 
-        # self.optimizer = torch.optim.Adam(self.nn.parameters(), lr=self.learning_rate, betas=(0.99, 0.999), eps=1e-08)
-        self.optimizer = torch.optim.Adam(self.nn.parameters(), lr=self.learning_rate, betas=(0.1, 0.99), eps=1e-08)
-        # self.optimizer = torch.optim.RMSprop(self.nn.parameters(), lr=self.learning_rate)
+        self.optimizer = torch.optim.Adam(self._nn.parameters(), lr=self.learning_rate, betas=(0.99, 0.999), eps=1e-08)
+        # self.optimizer = torch.optim.Adam(self._nn.parameters(), lr=self.learning_rate, betas=(0.0, 0.99), eps=1e-08)
+        # self.optimizer = torch.optim.RMSprop(self._nn.parameters(), lr=self.learning_rate)
 
         lr_step = self.noptepochs * (self.nsteps // self.nminibatches)
 
@@ -80,28 +80,44 @@ class PPO(base.BaseAlgo):
 
         self.buffer = Buffer()
 
-    def __call__(self, state):
-        return self.nn.get_action(torch.Tensor(state))
+        self._trainer = False
 
-    def experience(self, transition, timestep_now):
+    def __call__(self, state):
+        return self._nn.get_action(torch.Tensor(state))
+
+    def experience(self, transition):
         self.buffer.append(transition)
         if len(self.buffer) >= self.nsteps:
             data = self.buffer.rollout()
 
-            data = self.calculate_advantages(data)
+            data = self._calculate_advantages(data)
 
-            info = []
-
-            for i in range(self.noptepochs):
-                random.shuffle(data)
-                batches = self.buffer.learn(data, self.nminibatches)
-                for minibatch in batches:
-                    info.append(self.learn(minibatch, timestep_now))
-            return info
-
+            return data
         return None
 
-    def calculate_advantages(self, data):
+    def train(self, data):
+        if data is None:
+            return None
+
+        self._trainer = True
+
+        info = []
+
+        for i in range(self.noptepochs):
+            random.shuffle(data)
+            batches = self.buffer.learn(data, self.nminibatches)
+            for minibatch in batches:
+                info.append(self._one_train(minibatch))
+        return info
+
+    def update(self, from_agent: base.BaseAlgo):
+        assert not self._trainer
+
+        self._nn.load_state_dict(from_agent._nn.state_dict())
+
+        return True
+
+    def _calculate_advantages(self, data):
         states, actions, nstates, rewards, dones, outs = zip(*data)
         old_log_probs, old_vals = zip(*outs)
 
@@ -111,8 +127,8 @@ class PPO(base.BaseAlgo):
         n_rewards = numpy.array(rewards)
         n_dones = numpy.array(dones)
 
-        n_state_vals = self.nn(t_states)[1].detach().squeeze(-1).cpu().numpy()
-        n_new_state_vals = self.nn(t_nstates)[1].detach().squeeze(-1).cpu().numpy()
+        n_state_vals = self._nn(t_states)[1].detach().squeeze(-1).cpu().numpy()
+        n_new_state_vals = self._nn(t_nstates)[1].detach().squeeze(-1).cpu().numpy()
 
         # Making td residual
         td_residual = - n_state_vals + n_rewards + self.gamma * (1. - n_dones) * n_new_state_vals
@@ -124,14 +140,14 @@ class PPO(base.BaseAlgo):
 
         return list(zip(*transitions))
 
-    def learn(self, input, timestep_now):
+    def _one_train(self, input):
 
         # Unpack
         states, actions, nstates, rewards, dones, old_log_probs, old_vals, advs = input
 
         # Tensors
         t_states = torch.FloatTensor(states)
-        t_actions = torch.from_numpy(numpy.array(actions, dtype=self.nn.np_type))
+        t_actions = torch.from_numpy(numpy.array(actions, dtype=self._nn.np_type))
         t_nstates = torch.FloatTensor(nstates)
         t_rewards = torch.FloatTensor(rewards)
         t_dones = torch.FloatTensor(dones)
@@ -140,9 +156,9 @@ class PPO(base.BaseAlgo):
         t_advs = torch.FloatTensor(advs)
 
         # Feedforward with building computation graph
-        t_distrib, t_state_vals_un = self.nn(t_states)
+        t_distrib, t_state_vals_un = self._nn(t_states)
         t_state_vals = t_state_vals_un.squeeze(-1)
-        t_new_state_vals = self.nn(t_nstates)[1].detach().squeeze(-1)
+        t_new_state_vals = self._nn(t_nstates)[1].detach().squeeze(-1)
 
         # Making target for value update and for td residual
         t_target_state_vals = t_rewards + self.gamma * (1. - t_dones) * t_new_state_vals
@@ -189,7 +205,7 @@ class PPO(base.BaseAlgo):
         t_loss.backward()
 
         # Normalizing gradients
-        for param in self.nn.parameters():
+        for param in self._nn.parameters():
             param.grad.data.clamp_(-self.max_grad_norm, self.max_grad_norm)
 
         # Optimizer step

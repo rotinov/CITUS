@@ -2,12 +2,13 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="af940523-03fc-414c-a43c-b4796f374f10" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/Algos/base.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/common/schedules.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/common/logger.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/PPO/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/Algos/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Algos/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/Algos/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Algos/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/Algos/base.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/defaults/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/defaults/__init__.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/nns/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/nns/__init__.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/runners/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/runners/__init__.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
@@ -41,6 +42,9 @@
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
   <component name="ProjectId" id="1R1KiM3R85jIQk1IIllQ9By1Vc9" />
+  <component name="ProjectLevelVcsManager">
+    <ConfirmationsSetting value="2" id="Add" />
+  </component>
   <component name="PropertiesComponent">
     <property name="WebServerToolWindowFactoryState" value="false" />
     <property name="last_opened_file_path" value="$PROJECT_DIR$" />
@@ -102,7 +106,7 @@
       <workItem from="1569007804328" duration="137000" />
       <workItem from="1569016341331" duration="57000" />
       <workItem from="1569016458405" duration="2050000" />
-      <workItem from="1569049722344" duration="24746000" />
+      <workItem from="1569049722344" duration="31601000" />
     </task>
     <task id="LOCAL-00001" summary="Adjust">
       <created>1569018592573</created>
@@ -111,7 +115,14 @@
       <option name="project" value="LOCAL" />
       <updated>1569018592573</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="Adjust">
+      <created>1569078563469</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1569078563469</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -135,6 +146,6 @@
     <option name="LAST_COMMIT_MESSAGE" value="Adjust" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/CITUS$main.coverage" NAME="main Coverage Results" MODIFIED="1569078292631" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/CITUS$main.coverage" NAME="main Coverage Results" MODIFIED="1569085683772" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
   </component>
 </project>

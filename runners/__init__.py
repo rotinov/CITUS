@@ -1,32 +1,9 @@
-import time
 from collections import deque
 import re
 import nns
 import Algos
 from defaults import *
-
-
-def safemean(x):
-    return sum(x) / max(1, len(x))
-
-
-def log(eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, beg, *debug):
-    print('-' * 38)
-    print('| eplenmean: {:.2f}'.format(safemean(eplenmean)),
-          '\n| eprewmean: {:.2f}'.format(safemean(rewardarr)),
-          '\n| loss/policy_entropy: {:.2f}'.format(safemean(entropy)),
-          '\n| loss/policy_loss: {:+.2f}'.format(safemean(actor_loss)),
-          '\n| loss/value_loss: {:.2f}'.format(safemean(critic_loss)),
-          '\n| misc/nupdates: {:.2e}'.format(nupdates),
-          '\n| misc/serial_timesteps: {:.2e}'.format(frames),
-          '\n| misc/time_elapsed: {:.2e}'.format(int(time.time() - beg)))
-
-    i = 1
-    for item in debug:
-        print('| misc/debug {}: {:.2e}'.format(i, safemean(item)))
-        i += 1
-
-    print('-' * 38)
+from common.logger import log
 
 
 class Single:
@@ -48,7 +25,11 @@ class Single:
 
         self.actor = algo(nn, env.observation_space, env.action_space, self.cnfg)
 
-    def run(self, log_interval=500):
+        self.trainer = algo(nn, env.observation_space, env.action_space, self.cnfg)
+
+        self.actor.update(self.trainer)
+
+    def run(self, log_interval=1):
         timesteps = self.cnfg['timesteps']
 
         frames = 0
@@ -56,7 +37,6 @@ class Single:
         eplenmean = deque(maxlen=log_interval)
         rewardarr = deque(maxlen=log_interval)
         lr_things = []
-        beg = time.time()
         print("Stepping environment...")
         while frames < timesteps:
             state = self.env.reset()
@@ -71,18 +51,25 @@ class Single:
                 rewardsum += reward
 
                 transition = (state, pred_action, nstate, reward, done, out)
-                lr_thing = self.actor.experience(transition, frames)
-                if lr_thing:
+                data = self.actor.experience(transition)
+
+                if data:
+                    print("Done.")
+                    lr_thing = self.trainer.train(data)
                     lr_things.extend(lr_thing)
                     nupdates += 1
 
+                    self.actor.update(self.trainer)
+
+                    if nupdates % log_interval == 0:
+                        actor_loss, critic_loss, entropy, debug = zip(*lr_things)
+                        log(eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, *zip(*debug))
+                        lr_things = []
+
+                    print("Stepping environment...")
+
                 state = nstate
                 frames += 1
-
-                if frames % log_interval == 0 and len(lr_things) > 0:
-                    actor_loss, critic_loss, entropy, debug = zip(*lr_things)
-                    log(eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, beg, *zip(*debug))
-                    lr_things = []
 
                 if done:
                     eplenmean.append(frames - frames_beg)
@@ -90,4 +77,4 @@ class Single:
                     break
 
         actor_loss, critic_loss, entropy, debug = zip(*lr_things)
-        log(eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, beg, *zip(*debug))
+        log(eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, *zip(*debug))
