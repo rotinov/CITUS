@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.distributions import Categorical, Normal
-from defaults import weights_init
+from common.init_weights import weights_init
 from gym import spaces
 import numpy
 
@@ -24,8 +24,6 @@ def value(x):
 
 def classic_policy(x, y):
     return nn.Sequential(nn.Linear(x, 64),
-                         nn.Tanh(),
-                         nn.Linear(64, 64),
                          nn.Tanh(),
                          nn.Linear(64, y))
 

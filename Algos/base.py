@@ -1,4 +1,5 @@
 import torch
+from abc import ABCMeta, abstractmethod
 
 
 class BaseBuffer(object):
@@ -15,8 +16,15 @@ class BaseBuffer(object):
         pass
 
 
-class BaseAlgo:
+class BaseAlgo(metaclass=ABCMeta):
     _nn: torch.nn.Module
+
+    @abstractmethod
+    def __init__(self, nn,
+                 observation_space,
+                 action_space,
+                 cnfg):
+        pass
 
     def __call__(self, state):
         pass
@@ -28,4 +36,7 @@ class BaseAlgo:
         pass
 
     def update(self, from_agent):
+        pass
+
+    def to(self, device):
         pass

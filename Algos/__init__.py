@@ -4,6 +4,7 @@ import random
 import gym
 from Algos import base
 from common import schedules
+from pprint import pprint
 
 
 class Buffer(base.BaseBuffer):
@@ -38,7 +39,8 @@ class Buffer(base.BaseBuffer):
 
 
 class PPO(base.BaseAlgo):
-    lossfun = torch.nn.MSELoss()
+    _device = torch.device('cpu')
+    lossfun = torch.nn.MSELoss().to(_device)
 
     def __init__(self, nn,
                  observation_space=gym.spaces.Discrete(5),
@@ -46,6 +48,8 @@ class PPO(base.BaseAlgo):
                  cnfg=None):
 
         self.nn_type = nn
+
+        pprint(cnfg)
 
         self._nn = nn(observation_space, action_space, simple=cnfg['simple_nn'])
 
@@ -63,17 +67,17 @@ class PPO(base.BaseAlgo):
         self.noptepochs = cnfg['noptepochs']
         self.max_grad_norm = cnfg['max_grad_norm']
 
-        self.optimizer = torch.optim.Adam(self._nn.parameters(), lr=self.learning_rate, betas=(0.99, 0.999), eps=1e-08)
-        # self.optimizer = torch.optim.Adam(self._nn.parameters(), lr=self.learning_rate, betas=(0.0, 0.99), eps=1e-08)
-        # self.optimizer = torch.optim.RMSprop(self._nn.parameters(), lr=self.learning_rate)
+        self._optimizer = torch.optim.Adam(self._nn.parameters(), lr=self.learning_rate, betas=(0.9, 0.999), eps=1e-08)
+        # self._optimizer = torch.optim.Adam(self._nn.parameters(), lr=self.learning_rate, betas=(0.0, 0.99), eps=1e-08)
+        # self._optimizer = torch.optim.RMSprop(self._nn.parameters(), lr=self.learning_rate)
 
         lr_step = self.noptepochs * (self.nsteps // self.nminibatches)
 
-        # self.lr_scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=lr_step, gamma=0.995)
+        # self.lr_scheduler = torch.optim.lr_scheduler.StepLR(self._optimizer, step_size=lr_step, gamma=0.995)
 
         final_epoch = int(self.final_timestep / self.nminibatches * self.noptepochs)
 
-        self.lr_scheduler = schedules.LinearAnnealingLR(self.optimizer, eta_min=1e-6,
+        self.lr_scheduler = schedules.LinearAnnealingLR(self._optimizer, eta_min=1e-6,
                                                         to_epoch=final_epoch)
 
         print(final_epoch)  # 312500
@@ -83,7 +87,7 @@ class PPO(base.BaseAlgo):
         self._trainer = False
 
     def __call__(self, state):
-        return self._nn.get_action(torch.Tensor(state))
+        return self._nn.get_action(torch.from_numpy(numpy.array(state, dtype=numpy.float32)).to(self._device))
 
     def experience(self, transition):
         self.buffer.append(transition)
@@ -117,13 +121,20 @@ class PPO(base.BaseAlgo):
 
         return True
 
+    def to(self, device: str):
+        device = torch.device(device)
+        self._device = device
+        self._nn = self._nn.to(device)
+        self.lossfun = self.lossfun.to(device)
+
+        return self
+
     def _calculate_advantages(self, data):
         states, actions, nstates, rewards, dones, outs = zip(*data)
         old_log_probs, old_vals = zip(*outs)
 
-        n_state_old_vals = numpy.array(old_vals)
-        t_states = torch.FloatTensor(states)
-        t_nstates = torch.FloatTensor(nstates)
+        t_states = torch.FloatTensor(states).to(self._device)
+        t_nstates = torch.FloatTensor(nstates).to(self._device)
         n_rewards = numpy.array(rewards)
         n_dones = numpy.array(dones)
 
@@ -146,14 +157,14 @@ class PPO(base.BaseAlgo):
         states, actions, nstates, rewards, dones, old_log_probs, old_vals, advs = input
 
         # Tensors
-        t_states = torch.FloatTensor(states)
-        t_actions = torch.from_numpy(numpy.array(actions, dtype=self._nn.np_type))
-        t_nstates = torch.FloatTensor(nstates)
-        t_rewards = torch.FloatTensor(rewards)
-        t_dones = torch.FloatTensor(dones)
-        t_old_log_probs = torch.from_numpy(numpy.array(old_log_probs, dtype=numpy.float32))
-        t_state_old_vals = torch.FloatTensor(old_vals)
-        t_advs = torch.FloatTensor(advs)
+        t_states = torch.FloatTensor(states).to(self._device)
+        t_actions = torch.from_numpy(numpy.array(actions, dtype=self._nn.np_type)).to(self._device)
+        t_nstates = torch.FloatTensor(nstates).to(self._device)
+        t_rewards = torch.FloatTensor(rewards).to(self._device)
+        t_dones = torch.FloatTensor(dones).to(self._device)
+        t_old_log_probs = torch.from_numpy(numpy.array(old_log_probs, dtype=numpy.float32)).to(self._device)
+        t_state_old_vals = torch.FloatTensor(old_vals).to(self._device)
+        t_advs = torch.FloatTensor(advs).to(self._device)
 
         # Feedforward with building computation graph
         t_distrib, t_state_vals_un = self._nn(t_states)
@@ -168,7 +179,7 @@ class PPO(base.BaseAlgo):
         t_critic_loss1 = self.lossfun(t_state_vals, t_target_state_vals)
 
         # Making critic final loss
-        clip_value = False
+        clip_value = True
         if clip_value:
             t_critic_loss2 = self.lossfun(t_state_vals_clipped, t_target_state_vals)
             t_critic_loss = .5 * torch.max(t_critic_loss1, t_critic_loss2)
@@ -201,7 +212,7 @@ class PPO(base.BaseAlgo):
         t_loss = - t_surrogate
 
         # Calculating gradients
-        self.optimizer.zero_grad()
+        self._optimizer.zero_grad()
         t_loss.backward()
 
         # Normalizing gradients
@@ -209,7 +220,7 @@ class PPO(base.BaseAlgo):
             param.grad.data.clamp_(-self.max_grad_norm, self.max_grad_norm)
 
         # Optimizer step
-        self.optimizer.step()
+        self._optimizer.step()
         self.lr_scheduler.step()
 
         return t_actor_loss.item(), t_critic_loss.item(), t_entropy.item(), (self.lr_scheduler.get_lr()[0],

@@ -2,12 +2,12 @@ from collections import deque
 import re
 import nns
 import Algos
-from defaults import *
+from Algos.configs.PPO_config import *
 from common.logger import log
 
 
 class Single:
-    def __init__(self, env, algo=Algos.PPO, nn=nns.MLPDiscrete):
+    def __init__(self, env, algo: Algos.base.BaseAlgo.__class__ = Algos.PPO, nn=nns.MLPDiscrete):
         self.env = env
         env_type = str(env.unwrapped.__class__)
         env_type2 = re.split('[, \']', env_type)
@@ -25,7 +25,7 @@ class Single:
 
         self.actor = algo(nn, env.observation_space, env.action_space, self.cnfg)
 
-        self.trainer = algo(nn, env.observation_space, env.action_space, self.cnfg)
+        self.trainer = algo(nn, env.observation_space, env.action_space, self.cnfg).to('cuda:0')
 
         self.actor.update(self.trainer)
 

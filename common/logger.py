@@ -22,7 +22,7 @@ class StandardLogger:
 
         i = 1
         for item in debug:
-            print('| misc/debug {:2d}:', '{:.2e}'.format(i, safemean(item)).rjust(14, ' '), '  |')
+            print('| misc/debug {:2d}:'.format(i), '{:.2e}'.format(safemean(item)).rjust(17, ' '), '  |')
             i += 1
 
         print('-' * 38)
