@@ -2,9 +2,11 @@ import torch
 import numpy
 import random
 import gym
+from Algos import base
+from common import schedules
 
 
-class Buffer(object):
+class Buffer(base.BaseBuffer):
     def __init__(self):
         self.rollouts = []
 
@@ -21,16 +23,13 @@ class Buffer(object):
 
         batches = []
         for i in range(0, len(data), nminibatches):
-            last_ind = (i + nminibatches) if (len(data) - i - nminibatches) >= nminibatches else len(data)
-            one_batch = data[i:min(last_ind, len(data))]
+            one_batch = data[i:min(i + nminibatches, len(data))]
 
             states, actions, nstates, rewards, dones, old_log_probs, vals, returns = zip(*one_batch)
 
             transition = (states, actions, nstates, rewards, dones, old_log_probs, vals, returns)
 
             batches.append(transition)
-            if not last_ind == len(data):
-                break
 
         return batches
 
@@ -38,8 +37,8 @@ class Buffer(object):
         return len(self.rollouts)
 
 
-class PPO:
-    lossfun = torch.nn.SmoothL1Loss()
+class PPO(base.BaseAlgo):
+    lossfun = torch.nn.MSELoss()
 
     def __init__(self, nn,
                  observation_space=gym.spaces.Discrete(5),
@@ -64,7 +63,20 @@ class PPO:
         self.noptepochs = cnfg['noptepochs']
         self.max_grad_norm = cnfg['max_grad_norm']
 
-        self.optimizer = torch.optim.Adam(self.nn.parameters(), lr=self.learning_rate, betas=(0.99, 0.999), eps=1e-08)
+        # self.optimizer = torch.optim.Adam(self.nn.parameters(), lr=self.learning_rate, betas=(0.99, 0.999), eps=1e-08)
+        self.optimizer = torch.optim.Adam(self.nn.parameters(), lr=self.learning_rate, betas=(0.1, 0.99), eps=1e-08)
+        # self.optimizer = torch.optim.RMSprop(self.nn.parameters(), lr=self.learning_rate)
+
+        lr_step = self.noptepochs * (self.nsteps // self.nminibatches)
+
+        # self.lr_scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=lr_step, gamma=0.995)
+
+        final_epoch = int(self.final_timestep / self.nminibatches * self.noptepochs)
+
+        self.lr_scheduler = schedules.LinearAnnealingLR(self.optimizer, eta_min=1e-6,
+                                                        to_epoch=final_epoch)
+
+        print(final_epoch)  # 312500
 
         self.buffer = Buffer()
 
@@ -78,13 +90,14 @@ class PPO:
 
             data = self.calculate_advantages(data)
 
-            batches = self.buffer.learn(data, self.nminibatches)
+            info = []
 
             for i in range(self.noptepochs):
-                random.shuffle(batches)
+                random.shuffle(data)
+                batches = self.buffer.learn(data, self.nminibatches)
                 for minibatch in batches:
-                    ans = self.learn(minibatch, timestep_now)
-            return ans
+                    info.append(self.learn(minibatch, timestep_now))
+            return info
 
         return None
 
@@ -93,14 +106,16 @@ class PPO:
         old_log_probs, old_vals = zip(*outs)
 
         n_state_old_vals = numpy.array(old_vals)
+        t_states = torch.FloatTensor(states)
         t_nstates = torch.FloatTensor(nstates)
         n_rewards = numpy.array(rewards)
         n_dones = numpy.array(dones)
 
+        n_state_vals = self.nn(t_states)[1].detach().squeeze(-1).cpu().numpy()
         n_new_state_vals = self.nn(t_nstates)[1].detach().squeeze(-1).cpu().numpy()
 
         # Making td residual
-        td_residual = - n_state_old_vals + n_rewards + self.gamma * (1. - n_dones) * n_new_state_vals
+        td_residual = - n_state_vals + n_rewards + self.gamma * (1. - n_dones) * n_new_state_vals
 
         # Making GAE from td residual
         n_advs = list(self._gae(td_residual, n_dones))
@@ -137,7 +152,7 @@ class PPO:
         t_critic_loss1 = self.lossfun(t_state_vals, t_target_state_vals)
 
         # Making critic final loss
-        clip_value = True
+        clip_value = False
         if clip_value:
             t_critic_loss2 = self.lossfun(t_state_vals_clipped, t_target_state_vals)
             t_critic_loss = .5 * torch.max(t_critic_loss1, t_critic_loss2)
@@ -145,7 +160,7 @@ class PPO:
             t_critic_loss = .5 * t_critic_loss1
 
         # Normalizing advantages
-        # t_advantages = (t_advs - t_advs.mean()) / (t_advs.std() + 1e-8)
+        # t_advantages = t_advs
         t_advantages = (t_advs - t_advs.mean()) / (t_advs.std() + 1e-8)
 
         # Getting log probs
@@ -158,6 +173,7 @@ class PPO:
         t_rt1 = torch.mul(t_advantages.unsqueeze(-1), t_ratio)
         t_rt2 = torch.mul(t_advantages.unsqueeze(-1), torch.clamp(t_ratio, 1 - self.cliprange, 1 + self.cliprange))
         t_actor_loss = torch.min(t_rt1, t_rt2).mean()
+        # t_actor_loss = (torch.mul(t_advantages.unsqueeze(-1), t_ratio)).mean()
 
         # Calculating entropy
         t_entropy = t_distrib.entropy().mean()
@@ -176,15 +192,12 @@ class PPO:
         for param in self.nn.parameters():
             param.grad.data.clamp_(-self.max_grad_norm, self.max_grad_norm)
 
-        # Adjusting learning rate
-        lr_now = self.learning_rate * (1 - timestep_now / self.final_timestep)
-        for param_group in self.optimizer.param_groups:
-            param_group['lr'] = lr_now
-
         # Optimizer step
         self.optimizer.step()
+        self.lr_scheduler.step()
 
-        return t_actor_loss.item(), t_critic_loss.item(), t_entropy.item(), t_distrib.variance.min().item()
+        return t_actor_loss.item(), t_critic_loss.item(), t_entropy.item(), (self.lr_scheduler.get_lr()[0],
+                                                                             self.lr_scheduler.get_count())
 
     def _gae(self, td_residual, dones):
         for i in reversed(range(td_residual.shape[0] - 1)):

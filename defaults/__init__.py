@@ -29,7 +29,7 @@ def mujoco_config():
         max_grad_norm=0.5,
         learning_rate=3e-4,
         cliprange=0.2,
-        vf_coef=0.7,
+        vf_coef=0.5,
         ent_coef=0.0,
         simple_nn=True
     )

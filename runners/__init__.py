@@ -2,7 +2,7 @@ import time
 from collections import deque
 import re
 import nns
-import PPO
+import Algos
 from defaults import *
 
 
@@ -15,7 +15,7 @@ def log(eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames
     print('| eplenmean: {:.2f}'.format(safemean(eplenmean)),
           '\n| eprewmean: {:.2f}'.format(safemean(rewardarr)),
           '\n| loss/policy_entropy: {:.2f}'.format(safemean(entropy)),
-          '\n| loss/policy_loss: {:.2f}'.format(safemean(actor_loss)),
+          '\n| loss/policy_loss: {:+.2f}'.format(safemean(actor_loss)),
           '\n| loss/value_loss: {:.2f}'.format(safemean(critic_loss)),
           '\n| misc/nupdates: {:.2e}'.format(nupdates),
           '\n| misc/serial_timesteps: {:.2e}'.format(frames),
@@ -30,7 +30,7 @@ def log(eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames
 
 
 class Single:
-    def __init__(self, env, algo=PPO.PPO, nn=nns.MLPDiscrete):
+    def __init__(self, env, algo=Algos.PPO, nn=nns.MLPDiscrete):
         self.env = env
         env_type = str(env.unwrapped.__class__)
         env_type2 = re.split('[, \']', env_type)
@@ -72,18 +72,22 @@ class Single:
 
                 transition = (state, pred_action, nstate, reward, done, out)
                 lr_thing = self.actor.experience(transition, frames)
-                if lr_thing is not None:
-                    lr_things.append(lr_thing)
+                if lr_thing:
+                    lr_things.extend(lr_thing)
+                    nupdates += 1
 
                 state = nstate
                 frames += 1
 
                 if frames % log_interval == 0 and len(lr_things) > 0:
                     actor_loss, critic_loss, entropy, debug = zip(*lr_things)
-                    log(eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, beg, debug)
+                    log(eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, beg, *zip(*debug))
                     lr_things = []
 
                 if done:
                     eplenmean.append(frames - frames_beg)
                     rewardarr.append(rewardsum)
                     break
+
+        actor_loss, critic_loss, entropy, debug = zip(*lr_things)
+        log(eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, beg, *zip(*debug))
