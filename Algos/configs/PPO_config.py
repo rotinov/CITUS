@@ -19,14 +19,14 @@ def mujoco_config():
     return dict(
         timesteps=1e6,
         nsteps=2048,
-        nminibatches=32,
-        gamma=0.99,
-        lam=0.95,
+        nminibatches=64,
+        gamma=0.995,
+        lam=0.97,
         noptepochs=10,
         max_grad_norm=0.5,
         learning_rate=3e-4,
         cliprange=0.2,
-        vf_coef=1.0,
+        vf_coef=0.5,
         ent_coef=0.0,
         simple_nn=True
     )

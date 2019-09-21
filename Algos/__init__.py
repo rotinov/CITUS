@@ -67,7 +67,7 @@ class PPO(base.BaseAlgo):
         self.noptepochs = cnfg['noptepochs']
         self.max_grad_norm = cnfg['max_grad_norm']
 
-        self._optimizer = torch.optim.Adam(self._nn.parameters(), lr=self.learning_rate, betas=(0.9, 0.999), eps=1e-08)
+        self._optimizer = torch.optim.Adam(self._nn.parameters(), lr=self.learning_rate, betas=(0.99, 0.999), eps=1e-08)
         # self._optimizer = torch.optim.Adam(self._nn.parameters(), lr=self.learning_rate, betas=(0.0, 0.99), eps=1e-08)
         # self._optimizer = torch.optim.RMSprop(self._nn.parameters(), lr=self.learning_rate)
 

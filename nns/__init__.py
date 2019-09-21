@@ -25,11 +25,15 @@ def value(x):
 def classic_policy(x, y):
     return nn.Sequential(nn.Linear(x, 64),
                          nn.Tanh(),
+                         nn.Linear(64, 64),
+                         nn.Tanh(),
                          nn.Linear(64, y))
 
 
 def classic_value(x):
     return nn.Sequential(nn.Linear(x, 64),
+                         nn.Tanh(),
+                         nn.Linear(64, 64),
                          nn.Tanh(),
                          nn.Linear(64, 1))
 

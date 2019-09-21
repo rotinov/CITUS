@@ -3,7 +3,8 @@ import re
 import nns
 import Algos
 from Algos.configs.PPO_config import *
-from common.logger import log
+from common import logger
+import time
 
 
 class Single:
@@ -28,6 +29,8 @@ class Single:
         self.trainer = algo(nn, env.observation_space, env.action_space, self.cnfg).to('cuda:0')
 
         self.actor.update(self.trainer)
+
+        self.logger = logger.TensorboardLogger("logs/"+str(time.time()))
 
     def run(self, log_interval=1):
         timesteps = self.cnfg['timesteps']
@@ -63,7 +66,7 @@ class Single:
 
                     if nupdates % log_interval == 0:
                         actor_loss, critic_loss, entropy, debug = zip(*lr_things)
-                        log(eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, *zip(*debug))
+                        self.logger(eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, *zip(*debug))
                         lr_things = []
 
                     print("Stepping environment...")
@@ -77,4 +80,4 @@ class Single:
                     break
 
         actor_loss, critic_loss, entropy, debug = zip(*lr_things)
-        log(eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, *zip(*debug))
+        self.logger(eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, *zip(*debug))

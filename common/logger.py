@@ -1,4 +1,5 @@
 import time
+from torch.utils.tensorboard import SummaryWriter
 
 
 def safemean(x):
@@ -29,3 +30,34 @@ class StandardLogger:
 
 
 log = StandardLogger()
+
+
+class TensorboardLogger:
+    def __init__(self, path="logs/"):
+        self.writer = SummaryWriter(log_dir=path)
+        self.beg_time = time.time()
+        log.beg_time = self.beg_time
+
+    def __call__(self, eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, *debug):
+        log(eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, *debug)
+
+        self.writer.add_scalar("eplenmean", safemean(eplenmean), nupdates)
+        self.writer.add_scalar("eprewmean", safemean(rewardarr), nupdates)
+
+        self.writer.add_scalar("loss/policy_entropy", safemean(entropy), nupdates)
+        self.writer.add_scalar("loss/policy_loss", safemean(actor_loss), nupdates)
+        self.writer.add_scalar("loss/value_loss", safemean(critic_loss), nupdates)
+
+        self.writer.add_scalar("misc/nupdates", nupdates, nupdates)
+        self.writer.add_scalar("misc/serial_timesteps", frames, nupdates)
+        self.writer.add_scalar("misc/time_elapsed", int(time.time() - self.beg_time), nupdates)
+
+        i = 1
+        for item in debug:
+            self.writer.add_scalar("misc/debug {:2d}".format(i), safemean(item), nupdates)
+            i += 1
+
+        self.writer.flush()
+
+    def __del__(self):
+        self.writer.close()
