@@ -40,7 +40,7 @@ log = StandardLogger()
 
 
 class TensorboardLogger:
-    def __init__(self, path="logs/"):
+    def __init__(self, path=".logs/"):
         self.writer = SummaryWriter(log_dir=path)
         self.beg_time = time.time()
         log.beg_time = self.beg_time

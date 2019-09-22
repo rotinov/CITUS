@@ -1,1 +1,2 @@
-from runners.Single import Single
+from runners.single import Single
+from runners.distributed import Distributed

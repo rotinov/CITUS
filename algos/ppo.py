@@ -38,6 +38,8 @@ class Buffer(base.BaseBuffer):
 
 
 class PPO(base.BaseAlgo):
+    FIRST = True
+
     _device = torch.device('cpu')
     lossfun = torch.nn.MSELoss(reduction='none').to(_device)
 
@@ -48,11 +50,13 @@ class PPO(base.BaseAlgo):
 
         self.nn_type = nn
 
-        pprint(cnfg)
+        if self.FIRST:
+            pprint(cnfg)
 
         self._nn = nn(observation_space, action_space, simple=cnfg['simple_nn'])
 
-        print(self._nn)
+        if self.FIRST:
+            print(self._nn)
 
         self.gamma = cnfg['gamma']
         self.learning_rate = cnfg['learning_rate']
@@ -72,16 +76,15 @@ class PPO(base.BaseAlgo):
 
         # self.lr_scheduler = torch.optim.lr_scheduler.StepLR(self._optimizer, step_size=lr_step, gamma=0.995)
 
-        final_epoch = int(self.final_timestep / self.nminibatches * self.noptepochs)
+        final_epoch = int(self.final_timestep / self.nminibatches * self.noptepochs)  # 312500
 
         self.lr_scheduler = schedules.LinearAnnealingLR(self._optimizer, eta_min=0,  # 1e-6
                                                         to_epoch=final_epoch)
 
-        print(final_epoch)  # 312500
-
         self.buffer = Buffer()
 
         self._trainer = False
+        PPO.FIRST = False
 
     def __call__(self, state):
         with torch.no_grad():
@@ -227,12 +230,8 @@ class PPO(base.BaseAlgo):
         self._optimizer.step()
         self.lr_scheduler.step()
 
-        return t_actor_loss.item(), \
-               t_critic_loss.item(), \
-               t_entropy.item(), \
-               approxkl, \
-               clipfrac, \
-               t_distrib.variance.mean().item(), \
+        return t_actor_loss.item(), t_critic_loss.item(), t_entropy.item(), \
+               approxkl, clipfrac,  t_distrib.variance.mean().item(), \
                (self.lr_scheduler.get_lr()[0],
                 self.lr_scheduler.get_count())
 
