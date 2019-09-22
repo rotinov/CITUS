@@ -46,16 +46,16 @@ class PPO(base.BaseAlgo):
     def __init__(self, nn,
                  observation_space=gym.spaces.Discrete(5),
                  action_space=gym.spaces.Discrete(5),
-                 cnfg=None):
+                 cnfg=None, workers=1, print_set=True):
 
         self.nn_type = nn
 
-        if self.FIRST:
+        if self.FIRST and print_set:
             pprint(cnfg)
 
         self._nn = nn(observation_space, action_space, simple=cnfg['simple_nn'])
 
-        if self.FIRST:
+        if self.FIRST and print_set:
             print(self._nn)
 
         self.gamma = cnfg['gamma']
@@ -70,15 +70,15 @@ class PPO(base.BaseAlgo):
         self.noptepochs = cnfg['noptepochs']
         self.max_grad_norm = cnfg['max_grad_norm']
 
-        self._optimizer = torch.optim.Adam(self._nn.parameters(), lr=self.learning_rate, betas=(0.99, 0.999), eps=1e-08)
+        self._optimizer = torch.optim.Adam(self._nn.parameters(), lr=self.learning_rate, betas=(0.99, 0.999), eps=1e-5)
         # self._optimizer = torch.optim.Adam(self._nn.parameters(), lr=self.learning_rate, betas=(0.0, 0.99), eps=1e-08)
         # self._optimizer = torch.optim.RMSprop(self._nn.parameters(), lr=self.learning_rate)
 
         # self.lr_scheduler = torch.optim.lr_scheduler.StepLR(self._optimizer, step_size=lr_step, gamma=0.995)
 
-        final_epoch = int(self.final_timestep / self.nminibatches * self.noptepochs)  # 312500
+        final_epoch = int(self.final_timestep / self.nminibatches * self.noptepochs * workers)  # 312500
 
-        self.lr_scheduler = schedules.LinearAnnealingLR(self._optimizer, eta_min=0,  # 1e-6
+        self.lr_scheduler = schedules.LinearAnnealingLR(self._optimizer, eta_min=0.0,  # 1e-6
                                                         to_epoch=final_epoch)
 
         self.buffer = Buffer()
@@ -121,6 +121,17 @@ class PPO(base.BaseAlgo):
         self._nn.load_state_dict(from_agent._nn.state_dict())
 
         return True
+
+    def get_state_dict(self):
+        assert self._trainer
+        return self._nn.state_dict()
+
+    def get_nn_instance(self):
+        assert self._trainer
+        return self._nn
+
+    def load_state_dict(self, state_dict):
+        return self._nn.load_state_dict(state_dict)
 
     def to(self, device: str):
         device = torch.device(device)

@@ -1,9 +1,11 @@
 import time
 from torch.utils.tensorboard import SummaryWriter
+import numpy
 
 
 def safemean(x):
-    return sum(x) / max(1, len(x))
+    arr = numpy.array(x, dtype=numpy.float32)
+    return arr.mean()
 
 
 class StandardLogger:

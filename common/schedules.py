@@ -24,7 +24,7 @@ class LinearAnnealingLR(_LRScheduler):
         super(LinearAnnealingLR, self).__init__(optimizer, last_epoch)
 
     def get_lr(self):
-        return [self.eta_min + (base_lr - self.eta_min) * (1 - self._step_count / self.to_epoch)
+        return [self.eta_min + max(0, (base_lr - self.eta_min) * (1 - self._step_count / self.to_epoch))
                 for base_lr in self.base_lrs]
 
     def get_count(self):

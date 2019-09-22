@@ -1,6 +1,5 @@
 from mpi4py import MPI
 
-from collections import deque
 import re
 import nns
 import algos
@@ -10,35 +9,9 @@ import time
 from torch import cuda
 
 
-class Communications:
-    def __init__(self):
-        self.comm = MPI.COMM_WORLD
-        self.size = self.comm.Get_size()
-        self.rank = self.comm.Get_rank()
-        print(self.size)
-
-    def trainer(self):
-        return self.rank == 0
-
-    def gather_trainer(self):
-        data = ()
-        stat = self.comm.gather(data, root=0)
-        print(stat)
-        if len(data) == 1:
-            return None
-
-        puredata = data[1:]
-        return data  # zip(*puredata)
-
-    def gather_worker(self, data):
-        self.comm.gather(data, root=0)
-        print(data)
-
-    def close(self):
-        del self.comm
-
-
 class Distributed:
+    onexit = None
+
     def __init__(self, env, algo: algos.base.BaseAlgo.__class__ = algos.PPO, nn=nns.MLP):
         self.env = env
         env_type = str(env.unwrapped.__class__)
@@ -58,40 +31,97 @@ class Distributed:
         # self.communication = Communications()
         self.communication = MPI.COMM_WORLD
 
+        self.workers_num = (self.communication.Get_size() - 1)
+
+        self.cnfg['nminibatches'] *= self.workers_num
+
         if self.communication.Get_rank() == 0:
-            self.trainer = algo(nn, env.observation_space, env.action_space, self.cnfg)
+            self.trainer = algo(nn, env.observation_space, env.action_space, self.cnfg, workers=self.workers_num)
             if cuda.is_available():
                 self.trainer = self.trainer.to('cuda:0')
         else:
-            self.worker = algo(nn, env.observation_space, env.action_space, self.cnfg)
+            self.worker = algo(nn, env.observation_space, env.action_space, self.cnfg, print_set=False)
 
     def run(self, log_interval=1):
         if self.communication.Get_rank() == 0:
             self._train(log_interval)
         else:
-            self._work(log_interval)
+            self._work()
+
+        del self
+
+    def apply_onexit(self, func):
+        self.onexit = func
 
     def _train(self, log_interval=1):
         lr_things = []
+        nupdates = 0
+        self.logger = logger.TensorboardLogger(".logs/"+str(time.time()))
+        print("Stepping environment...")
+
+        finish = False
 
         while True:
+            # Get rollout
             data = self.communication.gather((), root=0)[1:]
+
             if data:
+                print("Done.")
                 batch = []
+                info_arr = []
                 for item in data:
-                    batch.extend(item)
+                    if isinstance(item, bool):
+                        finish = True
+                        break
+                    info, for_batch = item
+                    batch.extend(for_batch)
+                    info_arr.append(info)
+
+                if finish:
+                    break
+
+                eplenmean, rewardarr, frames = zip(*info_arr)
+
+                len_arr = []
+                rew_arr = []
+                for l_item, r_item in zip(eplenmean, rewardarr):
+                    len_arr.extend(l_item)
+                    rew_arr.extend(r_item)
 
                 lr_thing = self.trainer.train(batch)
                 lr_things.extend(lr_thing)
-                print(lr_things)
+                nupdates += 1
 
-    def _work(self, log_interval=1):
+                self.communication.bcast(self.trainer.get_state_dict(), root=0)
+
+                if nupdates % log_interval == 0:
+                    actor_loss, critic_loss, entropy, approxkl, clipfrac, variance, debug = zip(*lr_things)
+
+                    self.logger(len_arr, rew_arr, entropy,
+                                actor_loss, critic_loss, nupdates,
+                                logger.safemean(frames), approxkl, clipfrac, variance, zip(*debug))
+
+                    lr_things = []
+
+                print("Stepping environment...")
+
+        MPI.Finalize()
+
+        print("Training finished.")
+
+        if self.onexit is not None:
+            self.onexit(self.trainer.get_nn_instance())
+            print("Trainer: External job done.")
+
+        print("Trainer finished.")
+
+    def _work(self):
         timesteps = self.cnfg['timesteps']
 
         frames = 0
-        eplenmean = deque(maxlen=log_interval)
-        rewardarr = deque(maxlen=log_interval)
-        print("Stepping environment...")
+        eplenmean = []
+        rewardarr = []
+        finish = False
         while frames < timesteps:
             state = self.env.reset()
             frames_beg = frames
@@ -107,13 +137,17 @@ class Distributed:
                 transition = (state, pred_action, nstate, reward, done, out)
                 data = self.worker.experience(transition)
 
+                if frames >= timesteps:
+                    finish = True
+                    break
+
                 if data:
-                    print("Done.")
-                    self.communication.gather(data, root=0)
+                    self.communication.gather(((eplenmean, rewardarr, frames), data), root=0)
 
-                    # self.worker.update(self.trainer)
+                    self.worker.load_state_dict(self.communication.bcast(None, root=0))
 
-                    print("Stepping environment...")
+                    eplenmean = []
+                    rewardarr = []
 
                 state = nstate
                 frames += 1
@@ -122,3 +156,11 @@ class Distributed:
                     eplenmean.append(frames - frames_beg)
                     rewardarr.append(rewardsum)
                     break
+            if finish:
+                break
+
+        if self.communication.Get_size() == self.workers_num + 1:
+            print("Worker", self.communication.Get_rank(), "finished.")
+            self.communication.gather(True, root=0)
+
+        MPI.Finalize()
