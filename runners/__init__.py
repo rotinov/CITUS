@@ -5,6 +5,7 @@ import Algos
 from Algos.configs.PPO_config import *
 from common import logger
 import time
+import torch
 
 
 class Single:
@@ -24,11 +25,13 @@ class Single:
         else:
             self.cnfg = default_config()
 
-        self.actor = algo(nn, env.observation_space, env.action_space, self.cnfg)
+        self.worker = algo(nn, env.observation_space, env.action_space, self.cnfg)
 
-        self.trainer = algo(nn, env.observation_space, env.action_space, self.cnfg).to('cuda:0')
+        self.trainer = algo(nn, env.observation_space, env.action_space, self.cnfg)
+        if torch.cuda.is_available():
+            self.trainer = self.trainer.to('cuda:0')
 
-        self.actor.update(self.trainer)
+        self.worker.update(self.trainer)
 
         self.logger = logger.TensorboardLogger("logs/"+str(time.time()))
 
@@ -48,13 +51,13 @@ class Single:
             rewardsum = 0
 
             while True:
-                action, pred_action, out = self.actor(state)
+                action, pred_action, out = self.worker(state)
 
                 nstate, reward, done, _ = self.env.step(action)
                 rewardsum += reward
 
                 transition = (state, pred_action, nstate, reward, done, out)
-                data = self.actor.experience(transition)
+                data = self.worker.experience(transition)
 
                 if data:
                     print("Done.")
@@ -62,11 +65,13 @@ class Single:
                     lr_things.extend(lr_thing)
                     nupdates += 1
 
-                    self.actor.update(self.trainer)
+                    self.worker.update(self.trainer)
 
                     if nupdates % log_interval == 0:
-                        actor_loss, critic_loss, entropy, debug = zip(*lr_things)
-                        self.logger(eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, *zip(*debug))
+                        actor_loss, critic_loss, entropy, approxkl, clipfrac, variance, debug = zip(*lr_things)
+                        self.logger(eplenmean, rewardarr, entropy,
+                                    actor_loss, critic_loss, nupdates,
+                                    frames, approxkl, clipfrac, variance, zip(*debug))
                         lr_things = []
 
                     print("Stepping environment...")

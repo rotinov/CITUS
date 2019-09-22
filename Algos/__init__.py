@@ -21,7 +21,6 @@ class Buffer(base.BaseBuffer):
         return list(transitions)
 
     def learn(self, data, nminibatches):
-
         batches = []
         for i in range(0, len(data), nminibatches):
             one_batch = data[i:min(i + nminibatches, len(data))]
@@ -40,7 +39,8 @@ class Buffer(base.BaseBuffer):
 
 class PPO(base.BaseAlgo):
     _device = torch.device('cpu')
-    lossfun = torch.nn.MSELoss().to(_device)
+    lossfun = torch.nn.MSELoss(reduction='none').to(_device)
+    # lossfun = torch.nn.MSELoss(reduction='none').to(_device)
 
     def __init__(self, nn,
                  observation_space=gym.spaces.Discrete(5),
@@ -87,7 +87,8 @@ class PPO(base.BaseAlgo):
         self._trainer = False
 
     def __call__(self, state):
-        return self._nn.get_action(torch.from_numpy(numpy.array(state, dtype=numpy.float32)).to(self._device))
+        with torch.no_grad():
+            return self._nn.get_action(torch.from_numpy(numpy.array(state, dtype=numpy.float32)).to(self._device))
 
     def experience(self, transition):
         self.buffer.append(transition)
@@ -133,13 +134,15 @@ class PPO(base.BaseAlgo):
         states, actions, nstates, rewards, dones, outs = zip(*data)
         old_log_probs, old_vals = zip(*outs)
 
-        t_states = torch.FloatTensor(states).to(self._device)
-        t_nstates = torch.FloatTensor(nstates).to(self._device)
         n_rewards = numpy.array(rewards)
         n_dones = numpy.array(dones)
 
-        n_state_vals = self._nn(t_states)[1].detach().squeeze(-1).cpu().numpy()
-        n_new_state_vals = self._nn(t_nstates)[1].detach().squeeze(-1).cpu().numpy()
+        with torch.no_grad():
+            t_states = torch.FloatTensor(states).to(self._device)
+            t_nstates = torch.FloatTensor(nstates).to(self._device)
+
+            n_state_vals = self._nn(t_states)[1].detach().squeeze(-1).cpu().numpy()
+            n_new_state_vals = self._nn(t_nstates)[1].detach().squeeze(-1).cpu().numpy()
 
         # Making td residual
         td_residual = - n_state_vals + n_rewards + self.gamma * (1. - n_dones) * n_new_state_vals
@@ -175,16 +178,17 @@ class PPO(base.BaseAlgo):
         t_target_state_vals = t_rewards + self.gamma * (1. - t_dones) * t_new_state_vals
 
         # Making critic losses
-        t_state_vals_clipped = t_state_old_vals + torch.clamp(t_state_vals - t_state_old_vals, - self.cliprange, self.cliprange)
+        t_state_vals_clipped = t_state_old_vals + torch.clamp(t_state_vals - t_state_old_vals, - self.cliprange,
+                                                              self.cliprange)
         t_critic_loss1 = self.lossfun(t_state_vals, t_target_state_vals)
 
         # Making critic final loss
         clip_value = True
         if clip_value:
             t_critic_loss2 = self.lossfun(t_state_vals_clipped, t_target_state_vals)
-            t_critic_loss = .5 * torch.max(t_critic_loss1, t_critic_loss2)
+            t_critic_loss = .5 * torch.max(t_critic_loss1, t_critic_loss2).mean()
         else:
-            t_critic_loss = .5 * t_critic_loss1
+            t_critic_loss = .5 * t_critic_loss1.mean()
 
         # Normalizing advantages
         # t_advantages = t_advs
@@ -195,6 +199,9 @@ class PPO(base.BaseAlgo):
 
         # Calculating ratio
         t_ratio = torch.exp(t_new_log_probs - t_old_log_probs)
+
+        approxkl = (.5 * torch.mean((t_old_log_probs - t_new_log_probs).pow(2))).item()
+        clipfrac = torch.mean((torch.abs(t_ratio - 1.0) > self.cliprange).float()).item()
 
         # Calculating surrogates
         t_rt1 = torch.mul(t_advantages.unsqueeze(-1), t_ratio)
@@ -223,11 +230,17 @@ class PPO(base.BaseAlgo):
         self._optimizer.step()
         self.lr_scheduler.step()
 
-        return t_actor_loss.item(), t_critic_loss.item(), t_entropy.item(), (self.lr_scheduler.get_lr()[0],
-                                                                             self.lr_scheduler.get_count())
+        return t_actor_loss.item(), \
+               t_critic_loss.item(), \
+               t_entropy.item(), \
+               approxkl, \
+               clipfrac, \
+               t_distrib.variance.mean().item(), \
+               (self.lr_scheduler.get_lr()[0],
+                self.lr_scheduler.get_count())
 
     def _gae(self, td_residual, dones):
         for i in reversed(range(td_residual.shape[0] - 1)):
-            td_residual[i] += self.lam * self.gamma * (1. - dones[i]) * td_residual[i+1]
+            td_residual[i] += self.lam * self.gamma * (1. - dones[i]) * td_residual[i + 1]
 
         return td_residual
