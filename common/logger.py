@@ -46,10 +46,12 @@ class TensorboardLogger:
         log.beg_time = self.beg_time
 
     def __call__(self, eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, approxkl, clipfrac, variance, debug):
+        time_now = time.time()
         log(eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, approxkl, clipfrac, variance, debug)
 
         self.writer.add_scalar("eplenmean", safemean(eplenmean), nupdates)
         self.writer.add_scalar("eprewmean", safemean(rewardarr), nupdates)
+        self.writer.add_scalar("fps", frames / max(1e-8, float(time_now - self.beg_time)), nupdates)
 
         self.writer.add_scalar("loss/approxkl", safemean(approxkl), nupdates)
         self.writer.add_scalar("loss/clipfrac", safemean(clipfrac), nupdates)
@@ -60,7 +62,7 @@ class TensorboardLogger:
         self.writer.add_scalar("misc/explained_variance", safemean(variance), nupdates)
         self.writer.add_scalar("misc/nupdates", nupdates, nupdates)
         self.writer.add_scalar("misc/serial_timesteps", frames, nupdates)
-        self.writer.add_scalar("misc/time_elapsed", int(time.time() - self.beg_time), nupdates)
+        self.writer.add_scalar("misc/time_elapsed", float(time_now - self.beg_time), nupdates)
 
         i = 1
         for item in debug:

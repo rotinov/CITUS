@@ -2,7 +2,7 @@ import torch
 import numpy
 import random
 import gym
-from Algos import base
+from algos import base
 from common import schedules
 from pprint import pprint
 
@@ -40,7 +40,6 @@ class Buffer(base.BaseBuffer):
 class PPO(base.BaseAlgo):
     _device = torch.device('cpu')
     lossfun = torch.nn.MSELoss(reduction='none').to(_device)
-    # lossfun = torch.nn.MSELoss(reduction='none').to(_device)
 
     def __init__(self, nn,
                  observation_space=gym.spaces.Discrete(5),
@@ -71,13 +70,11 @@ class PPO(base.BaseAlgo):
         # self._optimizer = torch.optim.Adam(self._nn.parameters(), lr=self.learning_rate, betas=(0.0, 0.99), eps=1e-08)
         # self._optimizer = torch.optim.RMSprop(self._nn.parameters(), lr=self.learning_rate)
 
-        lr_step = self.noptepochs * (self.nsteps // self.nminibatches)
-
         # self.lr_scheduler = torch.optim.lr_scheduler.StepLR(self._optimizer, step_size=lr_step, gamma=0.995)
 
         final_epoch = int(self.final_timestep / self.nminibatches * self.noptepochs)
 
-        self.lr_scheduler = schedules.LinearAnnealingLR(self._optimizer, eta_min=1e-6,
+        self.lr_scheduler = schedules.LinearAnnealingLR(self._optimizer, eta_min=0,  # 1e-6
                                                         to_epoch=final_epoch)
 
         print(final_epoch)  # 312500
