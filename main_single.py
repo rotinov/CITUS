@@ -1,8 +1,7 @@
 import algos
 import nns
 import runners
-import gym
-from common.atari_wrappers import wrap_deepmind, make_atari
+from common.envs_prep.atari_wrappers import wrap_deepmind, make_atari
 
 
 # env = gym.make("InvertedDoublePendulum-v2")
