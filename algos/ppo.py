@@ -26,11 +26,7 @@ class Buffer(base.BaseBuffer):
         for i in range(0, len(data), minibatchsize):
             one_batch = data[i:min(i + minibatchsize, len(data))]
 
-            states, actions, nstates, rewards, dones, old_log_probs, vals, returns = zip(*one_batch)
-
-            transition = (states, actions, nstates, rewards, dones, old_log_probs, vals, returns)
-
-            batches.append(transition)
+            batches.append(one_batch)
 
         return batches
 
@@ -113,10 +109,28 @@ class PPO(base.BaseAlgo):
 
         info = []
 
+        # Unpack
+        states, actions, nstates, rewards, dones, old_log_probs, old_vals, advs = zip(*data)
+
+        # Tensors
+        t_states = torch.FloatTensor(states).to(self._device)
+        t_actions = torch.from_numpy(numpy.array(actions, dtype=self._nnet.np_type)).to(self._device)
+        t_nstates = torch.FloatTensor(nstates).to(self._device)
+        t_rewards = torch.FloatTensor(rewards).to(self._device)
+        t_dones = torch.FloatTensor(dones).to(self._device)
+        t_old_log_probs = torch.from_numpy(numpy.array(old_log_probs, dtype=numpy.float32)).to(self._device)
+        t_state_old_vals = torch.FloatTensor(old_vals).to(self._device)
+        t_advs = torch.FloatTensor(advs).to(self._device)
+
+        indexes = [i for i in range(len(data))]
+
         for i in range(self.noptepochs):
-            random.shuffle(data)
-            batches = self.buffer.learn(data, self.nbatch_train)
-            for minibatch in batches:
+            random.shuffle(indexes)
+            ind_batches = self.buffer.learn(indexes, self.nbatch_train)
+            for ind_minibatch in ind_batches:
+                minibatch = (t_states[ind_minibatch], t_actions[ind_minibatch], t_nstates[ind_minibatch],
+                             t_rewards[ind_minibatch], t_dones[ind_minibatch], t_old_log_probs[ind_minibatch],
+                             t_state_old_vals[ind_minibatch], t_advs[ind_minibatch])
                 info.append(self._one_train(minibatch))
         return info
 
@@ -171,25 +185,13 @@ class PPO(base.BaseAlgo):
         return list(zip(*transitions))
 
     def _one_train(self, input):
-
-        # Unpack
-        states, actions, nstates, rewards, dones, old_log_probs, old_vals, advs = input
-
-        # Tensors
-        t_states = torch.FloatTensor(states).to(self._device)
-        t_actions = torch.from_numpy(numpy.array(actions, dtype=self._nnet.np_type)).to(self._device)
-        t_nstates = torch.FloatTensor(nstates).to(self._device)
-        t_rewards = torch.FloatTensor(rewards).to(self._device)
-        t_dones = torch.FloatTensor(dones).to(self._device)
-        t_old_log_probs = torch.from_numpy(numpy.array(old_log_probs, dtype=numpy.float32)).to(self._device)
-        t_state_old_vals = torch.FloatTensor(old_vals).to(self._device)
-        t_advs = torch.FloatTensor(advs).to(self._device)
+        t_states, t_actions, t_nstates, t_rewards, t_dones, t_old_log_probs, t_state_old_vals, t_advs = input
 
         # Feedforward with building computation graph
         t_distrib, t_state_vals_un = self._nnet(t_states)
-        t_state_vals = t_state_vals_un.squeeze(-1)
+        t_state_vals = t_state_vals_un
         with torch.no_grad():
-            t_new_state_vals = self._nnet(t_nstates)[1].detach().squeeze(-1)
+            t_new_state_vals = self._nnet(t_nstates)[1].detach()
 
         # Making target for value update and for td residual
         t_target_state_vals = t_rewards + self.gamma * (1. - t_dones) * t_new_state_vals
@@ -209,20 +211,20 @@ class PPO(base.BaseAlgo):
 
         # Normalizing advantages
         # t_advantages = t_advs
-        t_advantages = (t_advs - t_advs.mean()) / (t_advs.std() + 1e-8)
+        t_advantages = ((t_advs - t_advs.mean()) / (t_advs.std() + 1e-8)).view(-1)
 
         # Getting log probs
         t_new_log_probs = t_distrib.log_prob(t_actions)
 
         # Calculating ratio
-        t_ratio = torch.exp(t_new_log_probs - t_old_log_probs)
+        t_ratio = torch.exp(t_new_log_probs - t_old_log_probs).view(-1)
 
         approxkl = (.5 * torch.mean((t_old_log_probs - t_new_log_probs).pow(2))).item()
         clipfrac = torch.mean((torch.abs(t_ratio - 1.0) > self.cliprange).float()).item()
 
         # Calculating surrogates
-        t_rt1 = torch.mul(t_advantages.unsqueeze(-1), t_ratio)
-        t_rt2 = torch.mul(t_advantages.unsqueeze(-1), torch.clamp(t_ratio, 1 - self.cliprange, 1 + self.cliprange))
+        t_rt1 = torch.mul(t_advantages, t_ratio)
+        t_rt2 = torch.mul(t_advantages, torch.clamp(t_ratio, 1 - self.cliprange, 1 + self.cliprange))
         t_actor_loss = torch.min(t_rt1, t_rt2).mean()
         # t_actor_loss = (torch.mul(t_advantages.unsqueeze(-1), t_ratio)).mean()
 

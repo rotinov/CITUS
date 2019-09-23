@@ -48,11 +48,22 @@ class MLPDiscrete(nn.Module):
         self.apply(weights_init)
 
     def forward(self, x):
+        compressed = False
+        if x.ndimension() == 5:
+            compressed = True
+            f = x.shape[0]
+            s = x.shape[1]
+            x = x.view(f*s, x.shape[2], x.shape[3], x.shape[4])
+
         xt = x.permute(0, 3, 1, 2)
         state_value = self.critic_head(xt)
 
         policy = self.actor_head(xt)
-        # print(policy)
+
+        if compressed:
+            state_value = state_value.view(f, s)
+            policy = policy.view(f, s, -1)
+
         dist = Categorical(policy)
 
         return dist, state_value
@@ -64,7 +75,10 @@ class MLPDiscrete(nn.Module):
         dist, state_value = self.forward(x)
         action = dist.sample()
 
-        return action.detach().cpu().numpy(), action.detach().cpu().numpy(), (dist.log_prob(action).detach().cpu().numpy(), state_value.detach().cpu().numpy())
+        return action.detach().cpu().numpy(), \
+               action.detach().cpu().numpy(), \
+               (dist.log_prob(action).detach().cpu().numpy(),
+                state_value.detach().squeeze(-1).cpu().numpy())
 
 
 def CNN(observation_space=spaces.Box(low=-10, high=10, shape=(1,)),

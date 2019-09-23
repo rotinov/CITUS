@@ -2,12 +2,23 @@ import algos
 import nns
 import runners
 from common.envs_prep.atari_wrappers import wrap_deepmind, make_atari
+from common.envs_prep.subproc_vec_env import SubprocVecEnv
 
 
-# env = gym.make("InvertedDoublePendulum-v2")
-env = make_atari("BreakoutNoFrameskip-v4")
-env = wrap_deepmind(env, frame_stack=True, clip_rewards=False)
+def make_env():
+    def _thunk():
+        return wrap_deepmind(make_atari("BreakoutNoFrameskip-v4"), frame_stack=True, clip_rewards=False)
+
+    return _thunk
 
 
-runner = runners.Single(env, algos.PPO, nns.CNN)
-runner.run()
+if __name__ == '__main__':
+    # env = gym.make("InvertedDoublePendulum-v2")
+    env = wrap_deepmind(make_atari("BreakoutNoFrameskip-v4"), frame_stack=True, clip_rewards=False)
+
+    num_envs = 8
+    envs = [make_env() for i in range(num_envs)]
+    envs = SubprocVecEnv(envs)
+
+    runner = runners.SingleVec(envs, algos.PPO, nns.CNN, workers_num=num_envs)
+    runner.run()
