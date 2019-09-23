@@ -25,10 +25,7 @@ class Single:
         else:
             self.cnfg = default_config()
 
-        self.cnfg['nminibatches'] *= 2
-        self.cnfg['noptepochs'] *= 2
-
-        self.worker = algo(nn, env.observation_space, env.action_space, self.cnfg)
+        self.worker = algo(nn, env.observation_space, env.action_space, self.cnfg, trainer=False)
 
         self.trainer = algo(nn, env.observation_space, env.action_space, self.cnfg)
         if cuda.is_available():

@@ -17,7 +17,6 @@ class Distributed:
         env_type = str(env.unwrapped.__class__)
         env_type2 = re.split('[, \']', env_type)
         self.env_type = env_type2[2].split('.')[2]
-        print(self.env_type)
 
         if self.env_type == 'classic_control':
             self.cnfg = classic_config()
@@ -33,14 +32,14 @@ class Distributed:
 
         self.workers_num = (self.communication.Get_size() - 1)
 
-        self.cnfg['nminibatches'] *= self.workers_num
-
         if self.communication.Get_rank() == 0:
-            self.trainer = algo(nn, env.observation_space, env.action_space, self.cnfg, workers=self.workers_num)
+            print(self.env_type)
+            self.trainer = algo(nn, env.observation_space, env.action_space, self.cnfg, workers=self.workers_num,
+                                trainer=True)
             if cuda.is_available():
                 self.trainer = self.trainer.to('cuda:0')
         else:
-            self.worker = algo(nn, env.observation_space, env.action_space, self.cnfg, print_set=False)
+            self.worker = algo(nn, env.observation_space, env.action_space, self.cnfg, trainer=False)
 
     def run(self, log_interval=1):
         if self.communication.Get_rank() == 0:

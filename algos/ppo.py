@@ -20,10 +20,10 @@ class Buffer(base.BaseBuffer):
 
         return list(transitions)
 
-    def learn(self, data, nminibatches):
+    def learn(self, data, minibatchsize):
         batches = []
-        for i in range(0, len(data), nminibatches):
-            one_batch = data[i:min(i + nminibatches, len(data))]
+        for i in range(0, len(data), minibatchsize):
+            one_batch = data[i:min(i + minibatchsize, len(data))]
 
             states, actions, nstates, rewards, dones, old_log_probs, vals, returns = zip(*one_batch)
 
@@ -38,25 +38,25 @@ class Buffer(base.BaseBuffer):
 
 
 class PPO(base.BaseAlgo):
-    FIRST = True
-
     _device = torch.device('cpu')
     lossfun = torch.nn.MSELoss(reduction='none').to(_device)
 
     def __init__(self, nn,
                  observation_space=gym.spaces.Discrete(5),
                  action_space=gym.spaces.Discrete(5),
-                 cnfg=None, workers=1, print_set=True):
+                 cnfg=None, workers=1, trainer=True):
 
         self.nn_type = nn
 
-        if self.FIRST and print_set:
+        if trainer:
             pprint(cnfg)
 
         self._nn = nn(observation_space, action_space, simple=cnfg['simple_nn'])
 
-        if self.FIRST and print_set:
+        if trainer:
             print(self._nn)
+        else:
+            self._nn.eval()
 
         self.gamma = cnfg['gamma']
         self.learning_rate = cnfg['learning_rate']
@@ -69,21 +69,23 @@ class PPO(base.BaseAlgo):
         self.lam = cnfg['lam']
         self.noptepochs = cnfg['noptepochs']
         self.max_grad_norm = cnfg['max_grad_norm']
+        self.workers_num = workers
 
-        self._optimizer = torch.optim.Adam(self._nn.parameters(), lr=self.learning_rate, betas=(0.99, 0.999), eps=1e-5)
-        # self._optimizer = torch.optim.Adam(self._nn.parameters(), lr=self.learning_rate, betas=(0.0, 0.99), eps=1e-08)
-        # self._optimizer = torch.optim.RMSprop(self._nn.parameters(), lr=self.learning_rate)
-
-        # self.lr_scheduler = torch.optim.lr_scheduler.StepLR(self._optimizer, step_size=lr_step, gamma=0.995)
+        self.nbatch = self.workers_num * self.nsteps
+        self.nbatch_train = self.nbatch // self.nminibatches
 
         final_epoch = int(self.final_timestep / self.nminibatches * self.noptepochs * workers)  # 312500
 
-        self.lr_scheduler = schedules.LinearAnnealingLR(self._optimizer, eta_min=0.0,  # 1e-6
-                                                        to_epoch=final_epoch)
+        if trainer:
+            self._optimizer = torch.optim.Adam(self._nn.parameters(), lr=self.learning_rate, betas=(0.99, 0.999),
+                                               eps=1e-5)
+
+            self.lr_scheduler = schedules.LinearAnnealingLR(self._optimizer, eta_min=0.0,  # 1e-6
+                                                            to_epoch=final_epoch)
 
         self.buffer = Buffer()
 
-        self._trainer = False
+        self._trainer = trainer
         PPO.FIRST = False
 
     def __call__(self, state):
@@ -104,13 +106,11 @@ class PPO(base.BaseAlgo):
         if data is None:
             return None
 
-        self._trainer = True
-
         info = []
 
         for i in range(self.noptepochs):
             random.shuffle(data)
-            batches = self.buffer.learn(data, self.nminibatches)
+            batches = self.buffer.learn(data, self.nbatch_train)
             for minibatch in batches:
                 info.append(self._one_train(minibatch))
         return info
@@ -183,7 +183,8 @@ class PPO(base.BaseAlgo):
         # Feedforward with building computation graph
         t_distrib, t_state_vals_un = self._nn(t_states)
         t_state_vals = t_state_vals_un.squeeze(-1)
-        t_new_state_vals = self._nn(t_nstates)[1].detach().squeeze(-1)
+        with torch.no_grad():
+            t_new_state_vals = self._nn(t_nstates)[1].detach().squeeze(-1)
 
         # Making target for value update and for td residual
         t_target_state_vals = t_rewards + self.gamma * (1. - t_dones) * t_new_state_vals
@@ -234,17 +235,14 @@ class PPO(base.BaseAlgo):
         t_loss.backward()
 
         # Normalizing gradients
-        for param in self._nn.parameters():
-            param.grad.data.clamp_(-self.max_grad_norm, self.max_grad_norm)
+        torch.nn.utils.clip_grad_norm_(self._nn.parameters(), self.max_grad_norm)
 
         # Optimizer step
         self._optimizer.step()
         self.lr_scheduler.step()
 
-        return t_actor_loss.item(), t_critic_loss.item(), t_entropy.item(), \
-               approxkl, clipfrac,  t_distrib.variance.mean().item(), \
-               (self.lr_scheduler.get_lr()[0],
-                self.lr_scheduler.get_count())
+        return t_actor_loss.item(), t_critic_loss.item(), t_entropy.item(), approxkl, clipfrac, \
+               t_distrib.variance.mean().item(), (self.lr_scheduler.get_lr()[0], self.lr_scheduler.get_count())
 
     def _gae(self, td_residual, dones):
         for i in reversed(range(td_residual.shape[0] - 1)):

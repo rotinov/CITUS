@@ -1,3 +1,3 @@
 import subprocess
 
-subprocess.run(["mpiexec", '-n',  "16", 'python',  '-m', 'mpi4py', 'main_for_par.py'])
+subprocess.run(["mpiexec", '-n',  "6", 'python',  '-m', 'mpi4py', 'main_for_par.py'])
