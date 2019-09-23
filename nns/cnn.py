@@ -57,11 +57,14 @@ class MLPDiscrete(nn.Module):
 
         return dist, state_value
 
-    def get_action(self, x):
+    def get_action(self, x: torch.FloatTensor):
+        if x.ndimension() < 4:
+            x.unsqueeze_(0)
+
         dist, state_value = self.forward(x)
         action = dist.sample()
 
-        return action.detach().cpu().numpy(), action.detach().cpu().numpy(), (dist.log_prob(action).detach().cpu().numpy(), state_value.detach().cpu().item())
+        return action.detach().cpu().numpy(), action.detach().cpu().numpy(), (dist.log_prob(action).detach().cpu().numpy(), state_value.detach().cpu().numpy())
 
 
 def CNN(observation_space=spaces.Box(low=-10, high=10, shape=(1,)),

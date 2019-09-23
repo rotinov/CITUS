@@ -95,7 +95,7 @@ class PPO(base.BaseAlgo):
     def __call__(self, state):
         with torch.no_grad():
             return self._nnet.get_action(torch.from_numpy(numpy.array(state, dtype=numpy.float32))
-                                         .to(self._device).unsqueeze(0))
+                                         .to(self._device))
 
     def experience(self, transition):
         self.buffer.append(transition)

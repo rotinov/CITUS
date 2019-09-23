@@ -48,11 +48,13 @@ class MLPDiscrete(nn.Module):
         return dist, state_value
 
     def get_action(self, x):
+        if x.ndimension() < 4:
+            x.unsqueeze_(0)
         dist, _ = self.forward(x)
         action = dist.sample()
 
         state_value = self.critic_head(x)
-        return action.detach().cpu().numpy(), action.detach().cpu().numpy(), (dist.log_prob(action).detach().cpu().numpy(), state_value.detach().cpu().item())
+        return action.detach().cpu().numpy(), action.detach().cpu().numpy(), (dist.log_prob(action).detach().cpu().numpy(), state_value.detach().cpu().numpy())
 
 
 class MLPContinuous(nn.Module):
@@ -85,12 +87,14 @@ class MLPContinuous(nn.Module):
         return dist, state_value
 
     def get_action(self, x):
+        if x.ndimension() < 4:
+            x.unsqueeze_(0)
         dist, _ = self.forward(x)
         smpled = dist.sample()
         action = torch.clamp(smpled, self.action_space.low[0], self.action_space.high[0])
 
         state_value = self.critic_head(x)
-        return action.detach().cpu().numpy(), smpled.detach().cpu().numpy(), (dist.log_prob(smpled).detach().cpu().numpy(), state_value.detach().cpu().item())
+        return action.detach().cpu().numpy(), smpled.detach().cpu().numpy(), (dist.log_prob(smpled).detach().cpu().numpy(), state_value.detach().cpu().numpy())
 
 
 def MLP(observation_space=spaces.Box(low=-10, high=10, shape=(1,)),
