@@ -5,6 +5,7 @@ import gym
 from algos import base
 from common import schedules
 from pprint import pprint
+from algos.configs.ppo_config import get_config
 
 
 class Buffer(base.BaseBuffer):
@@ -41,6 +42,8 @@ class PPO(base.BaseAlgo):
     _device = torch.device('cpu')
     lossfun = torch.nn.MSELoss(reduction='none').to(_device)
 
+    get_config = get_config
+
     def __init__(self, nn,
                  observation_space=gym.spaces.Discrete(5),
                  action_space=gym.spaces.Discrete(5),
@@ -51,12 +54,12 @@ class PPO(base.BaseAlgo):
         if trainer:
             pprint(cnfg)
 
-        self._nn = nn(observation_space, action_space, simple=cnfg['simple_nn'])
+        self._nnet = nn(observation_space, action_space)
 
         if trainer:
-            print(self._nn)
+            print(self._nnet)
         else:
-            self._nn.eval()
+            self._nnet.eval()
 
         self.gamma = cnfg['gamma']
         self.learning_rate = cnfg['learning_rate']
@@ -74,10 +77,11 @@ class PPO(base.BaseAlgo):
         self.nbatch = self.workers_num * self.nsteps
         self.nbatch_train = self.nbatch // self.nminibatches
 
-        final_epoch = int(self.final_timestep / self.nminibatches * self.noptepochs * workers)  # 312500
+        final_epoch = int(self.final_timestep / self.nsteps * self.nminibatches * self.noptepochs)  # 312500
+        print(final_epoch)
 
         if trainer:
-            self._optimizer = torch.optim.Adam(self._nn.parameters(), lr=self.learning_rate, betas=(0.99, 0.999),
+            self._optimizer = torch.optim.Adam(self._nnet.parameters(), lr=self.learning_rate, betas=(0.99, 0.999),
                                                eps=1e-5)
 
             self.lr_scheduler = schedules.LinearAnnealingLR(self._optimizer, eta_min=0.0,  # 1e-6
@@ -90,7 +94,8 @@ class PPO(base.BaseAlgo):
 
     def __call__(self, state):
         with torch.no_grad():
-            return self._nn.get_action(torch.from_numpy(numpy.array(state, dtype=numpy.float32)).to(self._device))
+            return self._nnet.get_action(torch.from_numpy(numpy.array(state, dtype=numpy.float32))
+                                         .to(self._device).unsqueeze(0))
 
     def experience(self, transition):
         self.buffer.append(transition)
@@ -118,25 +123,25 @@ class PPO(base.BaseAlgo):
     def update(self, from_agent: base.BaseAlgo):
         assert not self._trainer
 
-        self._nn.load_state_dict(from_agent._nn.state_dict())
+        self._nnet.load_state_dict(from_agent._nnet.state_dict())
 
         return True
 
     def get_state_dict(self):
         assert self._trainer
-        return self._nn.state_dict()
+        return self._nnet.state_dict()
 
     def get_nn_instance(self):
         assert self._trainer
-        return self._nn
+        return self._nnet
 
     def load_state_dict(self, state_dict):
-        return self._nn.load_state_dict(state_dict)
+        return self._nnet.load_state_dict(state_dict)
 
     def to(self, device: str):
         device = torch.device(device)
         self._device = device
-        self._nn = self._nn.to(device)
+        self._nnet = self._nnet.to(device)
         self.lossfun = self.lossfun.to(device)
 
         return self
@@ -152,8 +157,8 @@ class PPO(base.BaseAlgo):
             t_states = torch.FloatTensor(states).to(self._device)
             t_nstates = torch.FloatTensor(nstates).to(self._device)
 
-            n_state_vals = self._nn(t_states)[1].detach().squeeze(-1).cpu().numpy()
-            n_new_state_vals = self._nn(t_nstates)[1].detach().squeeze(-1).cpu().numpy()
+            n_state_vals = self._nnet(t_states)[1].detach().squeeze(-1).cpu().numpy()
+            n_new_state_vals = self._nnet(t_nstates)[1].detach().squeeze(-1).cpu().numpy()
 
         # Making td residual
         td_residual = - n_state_vals + n_rewards + self.gamma * (1. - n_dones) * n_new_state_vals
@@ -172,7 +177,7 @@ class PPO(base.BaseAlgo):
 
         # Tensors
         t_states = torch.FloatTensor(states).to(self._device)
-        t_actions = torch.from_numpy(numpy.array(actions, dtype=self._nn.np_type)).to(self._device)
+        t_actions = torch.from_numpy(numpy.array(actions, dtype=self._nnet.np_type)).to(self._device)
         t_nstates = torch.FloatTensor(nstates).to(self._device)
         t_rewards = torch.FloatTensor(rewards).to(self._device)
         t_dones = torch.FloatTensor(dones).to(self._device)
@@ -181,10 +186,10 @@ class PPO(base.BaseAlgo):
         t_advs = torch.FloatTensor(advs).to(self._device)
 
         # Feedforward with building computation graph
-        t_distrib, t_state_vals_un = self._nn(t_states)
+        t_distrib, t_state_vals_un = self._nnet(t_states)
         t_state_vals = t_state_vals_un.squeeze(-1)
         with torch.no_grad():
-            t_new_state_vals = self._nn(t_nstates)[1].detach().squeeze(-1)
+            t_new_state_vals = self._nnet(t_nstates)[1].detach().squeeze(-1)
 
         # Making target for value update and for td residual
         t_target_state_vals = t_rewards + self.gamma * (1. - t_dones) * t_new_state_vals
@@ -235,7 +240,7 @@ class PPO(base.BaseAlgo):
         t_loss.backward()
 
         # Normalizing gradients
-        torch.nn.utils.clip_grad_norm_(self._nn.parameters(), self.max_grad_norm)
+        torch.nn.utils.clip_grad_norm_(self._nnet.parameters(), self.max_grad_norm)
 
         # Optimizer step
         self._optimizer.step()

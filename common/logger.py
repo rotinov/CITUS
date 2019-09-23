@@ -3,9 +3,8 @@ from torch.utils.tensorboard import SummaryWriter
 import numpy
 
 
-def safemean(x):
-    arr = numpy.array(x, dtype=numpy.float32)
-    return arr.mean()
+def safemean(xs):
+    return numpy.nan if len(xs) == 0 else numpy.mean(xs)
 
 
 class StandardLogger:

@@ -1,8 +1,6 @@
 from collections import deque
-import re
 import nns
 import algos
-from algos.configs.ppo_config import *
 from common import logger
 import time
 from torch import cuda
@@ -11,19 +9,8 @@ from torch import cuda
 class Single:
     def __init__(self, env, algo: algos.base.BaseAlgo.__class__ = algos.PPO, nn=nns.MLP):
         self.env = env
-        env_type = str(env.unwrapped.__class__)
-        env_type2 = re.split('[, \']', env_type)
-        self.env_type = env_type2[2].split('.')[2]
+        self.cnfg, self.env_type = algo.get_config(env)
         print(self.env_type)
-
-        if self.env_type == 'classic_control':
-            self.cnfg = classic_config()
-        elif self.env_type == 'mujoco':
-            self.cnfg = mujoco_config()
-        elif self.env_type == 'box2d':
-            self.cnfg = box2d_config()
-        else:
-            self.cnfg = default_config()
 
         self.worker = algo(nn, env.observation_space, env.action_space, self.cnfg, trainer=False)
 
@@ -40,8 +27,8 @@ class Single:
 
         frames = 0
         nupdates = 0
-        eplenmean = deque(maxlen=log_interval)
-        rewardarr = deque(maxlen=log_interval)
+        eplenmean = deque(maxlen=5*log_interval)
+        rewardarr = deque(maxlen=5*log_interval)
         lr_things = []
         print("Stepping environment...")
         while frames < timesteps:

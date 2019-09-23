@@ -1,31 +1,18 @@
 from mpi4py import MPI
 
-import re
 import nns
 import algos
-from algos.configs.ppo_config import *
 from common import logger
 import time
 from torch import cuda
+from collections import deque
 
 
 class Distributed:
-    onexit = None
-
     def __init__(self, env, algo: algos.base.BaseAlgo.__class__ = algos.PPO, nn=nns.MLP):
         self.env = env
-        env_type = str(env.unwrapped.__class__)
-        env_type2 = re.split('[, \']', env_type)
-        self.env_type = env_type2[2].split('.')[2]
 
-        if self.env_type == 'classic_control':
-            self.cnfg = classic_config()
-        elif self.env_type == 'mujoco':
-            self.cnfg = mujoco_config()
-        elif self.env_type == 'box2d':
-            self.cnfg = box2d_config()
-        else:
-            self.cnfg = default_config()
+        self.cnfg, self.env_type = algo.get_config(env)
 
         # self.communication = Communications()
         self.communication = MPI.COMM_WORLD
@@ -47,10 +34,8 @@ class Distributed:
         else:
             self._work()
 
-        del self
-
-    def apply_onexit(self, func):
-        self.onexit = func
+    def is_trainer(self):
+        return self.communication.Get_rank() == 0
 
     def _train(self, log_interval=1):
         lr_things = []
@@ -108,18 +93,12 @@ class Distributed:
 
         print("Training finished.")
 
-        if self.onexit is not None:
-            self.onexit(self.trainer.get_nn_instance())
-            print("Trainer: External job done.")
-
-        print("Trainer finished.")
-
     def _work(self):
         timesteps = self.cnfg['timesteps']
 
         frames = 0
-        eplenmean = []
-        rewardarr = []
+        eplenmean = deque(maxlen=5)
+        rewardarr = deque(maxlen=5)
         finish = False
         while frames < timesteps:
             state = self.env.reset()
@@ -144,9 +123,6 @@ class Distributed:
                     self.communication.gather(((eplenmean, rewardarr, frames), data), root=0)
 
                     self.worker.load_state_dict(self.communication.bcast(None, root=0))
-
-                    eplenmean = []
-                    rewardarr = []
 
                 state = nstate
                 frames += 1

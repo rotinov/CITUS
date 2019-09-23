@@ -3,15 +3,21 @@ import nns
 import runners
 import gym
 import torch
+from common.atari_wrappers import wrap_deepmind, make_atari
 
 
-def check(x):
-    torch.save(x.state_dict(), "IDP-v2.pth")
+# env = gym.make("InvertedDoublePendulum-v2")
+# env = gym.make("CartPole-v1")
 
+env = make_atari("EnduroNoFrameskip-v4")
+env = wrap_deepmind(env, frame_stack=True, clip_rewards=False)
 
-env = gym.make("InvertedDoublePendulum-v2")
-runner = runners.Distributed(env, algos.PPO, nns.MLP)
-runner.apply_onexit(check)
+runner = runners.Distributed(env, algos.PPO, nns.CNN)
 runner.run()
+
+if runner.is_trainer():
+    nnet = runner.trainer.get_nn_instance()
+    torch.save(nnet, "IDP-v2.pth")
+    print("wawfaf")
 
 del runner

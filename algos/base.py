@@ -17,7 +17,7 @@ class BaseBuffer(object):
 
 
 class BaseAlgo(metaclass=ABCMeta):
-    _nn: torch.nn.Module
+    _nnet: torch.nn.Module
 
     @abstractmethod
     def __init__(self, nn,
