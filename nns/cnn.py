@@ -7,7 +7,7 @@ import numpy
 
 
 class CnnSmallBody(nn.Module):
-    cnn_out_size = 16*9*9
+    cnn_out_size = 16 * 9 * 9
 
     def __init__(self):
         super(CnnSmallBody, self).__init__()
@@ -28,7 +28,7 @@ class CnnSmallBody(nn.Module):
 
 
 class CnnSmallHead(nn.Module):
-    cnn_out_size = 16*9*9
+    cnn_out_size = 16 * 9 * 9
 
     def __init__(self, output):
         super(CnnSmallHead, self).__init__()
@@ -38,14 +38,13 @@ class CnnSmallHead(nn.Module):
                                 nn.Linear(128, output))
 
     def forward(self, cv):
-
         cv_f = cv.view(-1, self.cnn_out_size)
 
         return self.fc(cv_f)
 
 
 class CnnSmall(nn.Module):
-    cnn_out_size = 16*9*9
+    cnn_out_size = 16 * 9 * 9
 
     def __init__(self, output):
         super(CnnSmall, self).__init__()
@@ -88,7 +87,7 @@ class CNNDiscreteShared(nn.Module):
             compressed = True
             f = x.shape[0]
             s = x.shape[1]
-            x = x.view(f*s, x.shape[2], x.shape[3], x.shape[4])
+            x = x.view(f * s, x.shape[2], x.shape[3], x.shape[4])
 
         xt = x.permute(0, 3, 1, 2)
 
@@ -112,7 +111,7 @@ class CNNDiscreteShared(nn.Module):
             compressed = True
             f = x.shape[0]
             s = x.shape[1]
-            x = x.view(f*s, x.shape[2], x.shape[3], x.shape[4])
+            x = x.view(f * s, x.shape[2], x.shape[3], x.shape[4])
 
         xt = x.permute(0, 3, 1, 2)
         both = self.conv(xt)
@@ -142,5 +141,4 @@ class CNNDiscreteShared(nn.Module):
 def CNN(observation_space=spaces.Box(low=-10, high=10, shape=(1,)),
         action_space=spaces.Discrete(5),
         logstd=0.0, simple=False):
-
     return CNNDiscreteShared(observation_space, action_space)
