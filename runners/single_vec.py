@@ -8,7 +8,7 @@ import numpy
 
 
 class SingleVec:
-    def __init__(self, env, algo: algos.base.BaseAlgo.__class__ = algos.PPO, nn=nns.MLP, workers_num=1):
+    def __init__(self, env, algo: algos.base.BaseAlgo.__class__ = algos.PPO, nn=nns.MLP, workers_num=1, all_cuda=False):
         self.env = env
         self.cnfg, self.env_type = algo.get_config(env)
         print(self.env_type)
@@ -19,6 +19,8 @@ class SingleVec:
         self.trainer = algo(nn, env.observation_space, env.action_space, self.cnfg)
         if cuda.is_available():
             self.trainer = self.trainer.to('cuda:0')
+            if all_cuda:
+                self.trainer.to('cuda:0')
 
         self.worker.update(self.trainer)
 
