@@ -1,2 +1,2 @@
 language: python
-script: __init__.py
+script: python __init__.py
