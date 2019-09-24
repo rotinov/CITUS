@@ -185,8 +185,8 @@ class PPO(base.BaseAlgo):
 
         return list(zip(*transitions))
 
-    def _one_train(self, input):
-        t_states, t_actions, t_nstates, t_rewards, t_dones, t_old_log_probs, t_state_old_vals, t_advs = input
+    def _one_train(self, data):
+        t_states, t_actions, t_nstates, t_rewards, t_dones, t_old_log_probs, t_state_old_vals, t_advs = data
 
         # Feedforward with building computation graph
         t_distrib, t_state_vals_un = self._nnet(t_states)

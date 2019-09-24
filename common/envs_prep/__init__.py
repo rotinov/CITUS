@@ -15,7 +15,7 @@ def wrap_vec_atari(env_name, envs_num=multiprocessing.cpu_count()):
 
         return _thunk
 
-    envs = [make_env() for i in range(envs_num)]
+    envs = [make_env() for _ in range(envs_num)]
     envs = SubprocVecEnv(envs)
 
     env = make_env()()
