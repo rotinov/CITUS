@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.distributions import Categorical, Normal
-from common.init_weights import weights_init
+from common.init_weights import get_weights_init
 from gym import spaces
 import numpy
 
@@ -75,7 +75,7 @@ class MLPContinuous(nn.Module):
 
         self.log_std = nn.Parameter(torch.ones(action_space.shape[0]) * logstd)
 
-        self.apply(weights_init)
+        self.apply(get_weights_init('tanh'))
 
     def forward(self, x):
         compressed = False
