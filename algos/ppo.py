@@ -168,10 +168,12 @@ class PPO(base.BaseAlgo):
         n_dones = numpy.array(dones)
 
         n_state_vals = numpy.array(old_vals)
+        n_new_state_vals = numpy.array(old_vals)
+        n_new_state_vals[:-1] = n_new_state_vals[1:]
 
         with torch.no_grad():
-            t_nstates = torch.FloatTensor(nstates).to(self._device)
-            n_new_state_vals = self._nnet(t_nstates)[1].detach().squeeze(-1).cpu().numpy()
+            t_nstates = torch.FloatTensor(nstates[-1]).to(self._device)
+            n_new_state_vals[-1] = self._nnet(t_nstates)[1].detach().squeeze(-1).cpu().numpy()
 
         # Making td residual
         td_residual = - n_state_vals + n_rewards + self.gamma * (1. - n_dones) * n_new_state_vals
