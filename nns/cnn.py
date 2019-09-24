@@ -68,6 +68,24 @@ class MLPDiscrete(nn.Module):
 
         return dist, state_value
 
+    def get_value(self, x):
+        compressed = False
+        if x.ndimension() == 5:
+            compressed = True
+            f = x.shape[0]
+            s = x.shape[1]
+            x = x.view(f*s, x.shape[2], x.shape[3], x.shape[4])
+
+        xt = x.permute(0, 3, 1, 2)
+        state_value = self.critic_head(xt).detach()
+
+        if compressed:
+            state_value = state_value.view(f, s)
+        else:
+            state_value.squeeze(-1)
+
+        return state_value.cpu().numpy()
+
     def get_action(self, x: torch.FloatTensor):
         if x.ndimension() < 4:
             x.unsqueeze_(0)

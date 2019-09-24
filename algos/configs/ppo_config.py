@@ -74,6 +74,8 @@ def get_config(env):
         cnfg = classic_config()
     elif env_type == 'mujoco':
         cnfg = mujoco_config()
+    elif env_type == 'atari':
+        cnfg = atari_config()
     else:
         cnfg = default_config()
 
