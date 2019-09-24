@@ -78,23 +78,55 @@ class MLPContinuous(nn.Module):
         self.apply(weights_init)
 
     def forward(self, x):
+        compressed = False
+        if x.ndimension() == 3:
+            compressed = True
+            f = x.shape[0]
+            s = x.shape[1]
+            x = x.view(f*s, x.shape[2])
+
         state_value = self.critic_head(x)
 
         mu = self.actor_head(x)
+
+        if compressed:
+            state_value = state_value.view(f, s)
+            mu = mu.view(f, s, -1)
+
         std = self.log_std.expand_as(mu).exp()
         dist = Normal(mu, std)
 
         return dist, state_value
 
+    def get_value(self, x):
+        compressed = False
+        if x.ndimension() == 3:
+            compressed = True
+            f = x.shape[0]
+            s = x.shape[1]
+            x = x.view(f*s, x.shape[2])
+
+        state_value = self.critic_head(x).detach()
+
+        if compressed:
+            state_value = state_value.view(f, s)
+        else:
+            state_value.squeeze(-1)
+
+        return state_value.cpu().numpy()
+
     def get_action(self, x):
-        if x.ndimension() < 4:
+        if x.ndimension() < 2:
             x.unsqueeze_(0)
         dist, _ = self.forward(x)
         smpled = dist.sample()
         action = torch.clamp(smpled, self.action_space.low[0], self.action_space.high[0])
 
         state_value = self.critic_head(x)
-        return action.detach().cpu().numpy(), smpled.detach().cpu().numpy(), (dist.log_prob(smpled).detach().cpu().numpy(), state_value.detach().cpu().numpy())
+        return action.detach().cpu().numpy(), \
+               smpled.detach().cpu().numpy(), \
+               (dist.log_prob(smpled).detach().cpu().numpy(),
+                state_value.detach().squeeze(-1).cpu().numpy())
 
 
 def MLP(observation_space=spaces.Box(low=-10, high=10, shape=(1,)),

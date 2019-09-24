@@ -8,9 +8,9 @@ import numpy
 
 
 class SingleVec:
-    def __init__(self, env, algo: algos.base.BaseAlgo.__class__ = algos.PPO, nn=nns.MLP, workers_num=1, all_cuda=False):
+    def __init__(self, env, env_one, algo: algos.base.BaseAlgo.__class__ = algos.PPO, nn=nns.MLP, workers_num=1, all_cuda=False):
         self.env = env
-        self.cnfg, self.env_type = algo.get_config(env)
+        self.cnfg, self.env_type = algo.get_config(env_one)
         print(self.env_type)
         self.workers_num = workers_num
 
@@ -77,6 +77,10 @@ class SingleVec:
                     eplenmean[i].append(frames - beg[i])
                     rewardsum[i] = 0
                     beg[i] = frames
+
+        print("Done.")
+
+        self.env.close()
 
         if lr_things:
             actor_loss, critic_loss, entropy, approxkl, clipfrac, variance, debug = zip(*lr_things)
