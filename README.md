@@ -1,6 +1,8 @@
 # AGNES - Flexible Reinforcement Learning Framework with PyTorch
 
-**This framework is under development and bugs may occur.**
+**Status:** This framework is under development and bugs may occur.
+
+[![Build status](https://travis-ci.org/rotinov/AGNES.svg?branch=master)](https://travis-ci.org/rotinov/AGNES)
 
 ## Runners
 * Single
