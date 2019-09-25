@@ -85,3 +85,6 @@ class ListLogger:
 
     def __del__(self):
         del self.loggers
+
+    def is_active(self):
+        return len(self.loggers) != 0
