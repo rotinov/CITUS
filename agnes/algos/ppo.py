@@ -73,7 +73,6 @@ class PPO(base.BaseAlgo):
         self.nbatch_train = self.nbatch // self.nminibatches
 
         final_epoch = int(self.final_timestep / self.nsteps * self.nminibatches * self.noptepochs)  # 312500
-        print(final_epoch)
 
         if trainer:
             self._optimizer = torch.optim.Adam(self._nnet.parameters(), lr=self.learning_rate, betas=(0.99, 0.999),

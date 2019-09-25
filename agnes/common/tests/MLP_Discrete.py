@@ -1,8 +1,8 @@
-import algos
-import nns
-import runners
+import agnes.algos
+import agnes.nns
+import agnes.runners
 import gym
-from common import logger
+from agnes.common import logger
 
 
 def test_config():
@@ -23,7 +23,5 @@ def test_config():
 
 env = gym.make('CartPole-v0')
 
-runner = runners.Single(env, algos.PPO, nns.MLP, cnfg=test_config())
-runner.log(logger.TensorboardLogger(), logger.log)
+runner = agnes.runners.Single(env, agnes.algos.PPO, agnes.nns.MLP, cnfg=test_config())
 runner.run()
-del runner

@@ -61,7 +61,8 @@ class Single:
             data = self.worker.experience(transition)
 
             if data:
-                print("Done.")
+                if self.logger.is_active():
+                    print("Done.")
                 lr_thing = self.trainer.train(data)
                 lr_things.extend(lr_thing)
                 nupdates += 1
@@ -75,7 +76,8 @@ class Single:
                                 frames, approxkl, clipfrac, variance, zip(*debug))
                     lr_things = []
 
-                print("Stepping environment...")
+                if self.logger.is_active():
+                    print("Stepping environment...")
 
             state = nstate
             frames += 1
@@ -93,10 +95,12 @@ class Single:
 
         self.env.close()
 
-        del self.env
-
         if lr_things:
             actor_loss, critic_loss, entropy, approxkl, clipfrac, variance, debug = zip(*lr_things)
             self.logger(numpy.array(eplenmean).reshape(-1), numpy.array(rewardarr).reshape(-1), entropy,
                         actor_loss, critic_loss, nupdates,
                         frames, approxkl, clipfrac, variance, zip(*debug))
+
+        del self.env
+        del self.logger
+        del self.worker
