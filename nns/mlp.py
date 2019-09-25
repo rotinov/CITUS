@@ -54,7 +54,8 @@ class MLPDiscrete(nn.Module):
         action = dist.sample()
 
         state_value = self.critic_head(x)
-        return action.detach().cpu().numpy(), action.detach().cpu().numpy(), (dist.log_prob(action).detach().cpu().numpy(), state_value.detach().cpu().numpy())
+        return action.detach().cpu().numpy(), action.detach().cpu().numpy(), (
+            dist.log_prob(action).detach().cpu().numpy(), state_value.detach().cpu().numpy())
 
 
 class MLPContinuous(nn.Module):
@@ -83,7 +84,7 @@ class MLPContinuous(nn.Module):
             compressed = True
             f = x.shape[0]
             s = x.shape[1]
-            x = x.view(f*s, x.shape[2])
+            x = x.view(f * s, x.shape[2])
 
         state_value = self.critic_head(x)
 
@@ -104,7 +105,7 @@ class MLPContinuous(nn.Module):
             compressed = True
             f = x.shape[0]
             s = x.shape[1]
-            x = x.view(f*s, x.shape[2])
+            x = x.view(f * s, x.shape[2])
 
         state_value = self.critic_head(x).detach()
 

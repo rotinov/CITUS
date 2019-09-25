@@ -40,10 +40,9 @@ class PPO(base.BaseAlgo):
 
     get_config = get_config
 
-    def __init__(self, nn,
-                 observation_space=gym.spaces.Discrete(5),
-                 action_space=gym.spaces.Discrete(5),
-                 cnfg=None, workers=1, trainer=True):
+    def __init__(self, nn, observation_space=gym.spaces.Discrete(5), action_space=gym.spaces.Discrete(5), cnfg=None,
+                 workers=1, trainer=True):
+        super().__init__()
 
         self.nn_type = nn
 
@@ -110,12 +109,12 @@ class PPO(base.BaseAlgo):
         info = []
 
         # Unpack
-        states, actions, nstates, rewards, dones, old_log_probs, old_vals, advs = zip(*data)
+        states, actions, new_state_old_vals, rewards, dones, old_log_probs, old_vals, advs = zip(*data)
 
         # Tensors
         t_states = torch.FloatTensor(states).to(self._device)
         t_actions = torch.from_numpy(numpy.array(actions, dtype=self._nnet.np_type)).to(self._device)
-        t_nstates = torch.FloatTensor(nstates).to(self._device)
+        t_new_state_old_vals = torch.FloatTensor(new_state_old_vals).to(self._device)
         t_rewards = torch.FloatTensor(rewards).to(self._device)
         t_dones = torch.FloatTensor(dones).to(self._device)
         t_old_log_probs = torch.from_numpy(numpy.array(old_log_probs, dtype=numpy.float32)).to(self._device)
@@ -128,7 +127,7 @@ class PPO(base.BaseAlgo):
             random.shuffle(indexes)
             ind_batches = self.buffer.learn(indexes, self.nbatch_train)
             for ind_minibatch in ind_batches:
-                minibatch = (t_states[ind_minibatch], t_actions[ind_minibatch], t_nstates[ind_minibatch],
+                minibatch = (t_states[ind_minibatch], t_actions[ind_minibatch], t_new_state_old_vals[ind_minibatch],
                              t_rewards[ind_minibatch], t_dones[ind_minibatch], t_old_log_probs[ind_minibatch],
                              t_state_old_vals[ind_minibatch], t_advs[ind_minibatch])
                 info.append(self._one_train(minibatch))
@@ -181,21 +180,21 @@ class PPO(base.BaseAlgo):
         # Making GAE from td residual
         n_advs = list(self._gae(td_residual, n_dones))
 
-        transitions = (states, actions, nstates, rewards, dones, old_log_probs, old_vals, n_advs)
+        l_new_state_vals = list(n_new_state_vals)
+
+        transitions = (states, actions, l_new_state_vals, rewards, dones, old_log_probs, old_vals, n_advs)
 
         return list(zip(*transitions))
 
     def _one_train(self, data):
-        t_states, t_actions, t_nstates, t_rewards, t_dones, t_old_log_probs, t_state_old_vals, t_advs = data
+        t_states, t_actions, t_new_state_old_vals, t_rewards, t_dones, t_old_log_probs, t_state_old_vals, t_advs = data
 
         # Feedforward with building computation graph
         t_distrib, t_state_vals_un = self._nnet(t_states)
         t_state_vals = t_state_vals_un
-        with torch.no_grad():
-            t_new_state_vals = self._nnet(t_nstates)[1].detach()
 
         # Making target for value update and for td residual
-        t_target_state_vals = t_rewards + self.gamma * (1. - t_dones) * t_new_state_vals
+        t_target_state_vals = t_rewards + self.gamma * (1. - t_dones) * t_new_state_old_vals
 
         # Making critic losses
         t_state_vals_clipped = t_state_old_vals + torch.clamp(t_state_vals - t_state_old_vals, - self.cliprange,
@@ -203,12 +202,8 @@ class PPO(base.BaseAlgo):
         t_critic_loss1 = self.lossfun(t_state_vals, t_target_state_vals)
 
         # Making critic final loss
-        clip_value = True
-        if clip_value:
-            t_critic_loss2 = self.lossfun(t_state_vals_clipped, t_target_state_vals)
-            t_critic_loss = .5 * torch.max(t_critic_loss1, t_critic_loss2).mean()
-        else:
-            t_critic_loss = .5 * t_critic_loss1.mean()
+        t_critic_loss2 = self.lossfun(t_state_vals_clipped, t_target_state_vals)
+        t_critic_loss = .5 * torch.max(t_critic_loss1, t_critic_loss2).mean()
 
         # Normalizing advantages
         # t_advantages = t_advs
