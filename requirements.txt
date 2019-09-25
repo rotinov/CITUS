@@ -1,3 +1,4 @@
+cloudpickle
 torch
 numpy
 gym
