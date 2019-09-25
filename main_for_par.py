@@ -1,8 +1,8 @@
-import algos
-import nns
-import runners
+import agnes.algos
+import agnes.nns
+import agnes.runners
 import torch
-from common.envs_prep.atari_wrappers import wrap_deepmind, make_atari
+from agnes.common.envs_prep.atari_wrappers import wrap_deepmind, make_atari
 
 
 # env = gym.make("InvertedDoublePendulum-v2")
@@ -11,7 +11,7 @@ from common.envs_prep.atari_wrappers import wrap_deepmind, make_atari
 env = make_atari("EnduroNoFrameskip-v4")
 env = wrap_deepmind(env, frame_stack=True, clip_rewards=False)
 
-runner = runners.Distributed(env, algos.PPO, nns.CNN)
+runner = agnes.runners.Distributed(env, agnes.algos.PPO, agnes.nns.CNN)
 runner.run()
 
 if runner.is_trainer():

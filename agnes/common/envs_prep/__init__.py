@@ -1,8 +1,8 @@
-from common.envs_prep.atari_wrappers import wrap_deepmind, make_atari
+from agnes.common.envs_prep.atari_wrappers import wrap_deepmind, make_atari
 
 import gym
 
-from common.envs_prep.subproc_vec_env import SubprocVecEnv
+from agnes.common.envs_prep.subproc_vec_env import SubprocVecEnv
 
 import multiprocessing
 

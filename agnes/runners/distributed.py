@@ -1,15 +1,15 @@
 from mpi4py import MPI
 
-import nns
-import algos
-from common import logger
+import agnes.nns
+import agnes.algos
+from agnes.common import logger
 import time
 from torch import cuda
 from collections import deque
 
 
 class Distributed:
-    def __init__(self, env, algo: algos.base.BaseAlgo.__class__ = algos.PPO, nn=nns.MLP, cnfg=None):
+    def __init__(self, env, algo: agnes.algos.base.BaseAlgo.__class__ = agnes.algos.PPO, nn=agnes.nns.MLP, cnfg=None):
         self.env = env
 
         self.cnfg, self.env_type = algo.get_config(env)
