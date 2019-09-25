@@ -66,9 +66,12 @@ def default_config():
 
 
 def get_config(env):
-    env_type = str(env.unwrapped.__class__)
-    env_type2 = re.split('[, \']', env_type)
-    env_type = env_type2[2].split('.')[2]
+    if not isinstance(env, str):
+        env_type = str(env.unwrapped.__class__)
+        env_type2 = re.split('[, \']', env_type)
+        env_type = env_type2[2].split('.')[2]
+    else:
+        env_type = env
 
     if env_type == 'classic_control':
         cnfg = classic_config()

@@ -41,14 +41,12 @@ log = StandardLogger()
 
 
 class TensorboardLogger:
-    def __init__(self, path=".logs/"):
+    def __init__(self, path=".logs/"+str(time.time())):
         self.writer = SummaryWriter(log_dir=path)
         self.beg_time = time.time()
-        log.beg_time = self.beg_time
 
     def __call__(self, eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, approxkl, clipfrac, variance, debug):
         time_now = time.time()
-        log(eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, approxkl, clipfrac, variance, debug)
 
         self.writer.add_scalar("eplenmean", safemean(eplenmean), nupdates)
         self.writer.add_scalar("eprewmean", safemean(rewardarr), nupdates)
@@ -74,3 +72,16 @@ class TensorboardLogger:
 
     def __del__(self):
         self.writer.close()
+
+
+class ListLogger:
+    def __init__(self, args=[]):
+        self.loggers = args
+
+    def __call__(self, eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, approxkl, clipfrac, variance, debug):
+        data = (eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, approxkl, clipfrac, variance, debug)
+        for logger in self.loggers:
+            logger(*data)
+
+    def __del__(self):
+        del self.loggers
