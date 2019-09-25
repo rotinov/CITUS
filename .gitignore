@@ -1,3 +1,4 @@
 .idea/
 *.pyc
 .logs/
+*.py___jb_tmp___
