@@ -1,6 +1,7 @@
 cloudpickle
 gym
 gym[atari]
+atari_py
 mpi4py
 Tensorboard
 numpy
