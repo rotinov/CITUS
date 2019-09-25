@@ -120,6 +120,7 @@ class SubprocVecEnv(VecEnv):
         if not self.closed:
             self.close()
 
+
 def _flatten_obs(obs):
     assert isinstance(obs, (list, tuple))
     assert len(obs) > 0
@@ -129,6 +130,7 @@ def _flatten_obs(obs):
         return {k: np.stack([o[k] for o in obs]) for k in keys}
     else:
         return np.stack(obs)
+
 
 def _flatten_list(l):
     assert isinstance(l, (list, tuple))

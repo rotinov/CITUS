@@ -1,0 +1,6 @@
+cloudpickle
+torch
+numpy
+gym
+gym[atari]
+mpi4py
