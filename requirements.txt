@@ -1,6 +1,7 @@
 cloudpickle
-torch
-numpy
 gym
 gym[atari]
 mpi4py
+Tensorboard
+numpy
+torch
