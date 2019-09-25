@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.distributions import Categorical, Normal
-from common.init_weights import get_weights_init
+from agnes.common.init_weights import get_weights_init
 from gym import spaces
 import numpy
 

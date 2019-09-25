@@ -4,7 +4,7 @@ from collections import deque
 import gym
 from gym import spaces
 import cv2
-from common.envs_prep.wrappers import TimeLimit
+from agnes.common.envs_prep.wrappers import TimeLimit
 
 os.environ.setdefault('PATH', '')
 cv2.ocl.setUseOpenCL(False)
