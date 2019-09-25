@@ -84,8 +84,10 @@ class SingleVec:
 
         self.env.close()
 
+        del self.env
+
         if lr_things:
             actor_loss, critic_loss, entropy, approxkl, clipfrac, variance, debug = zip(*lr_things)
-            self.logger(eplenmean, rewardarr, entropy,
+            self.logger(numpy.array(eplenmean).reshape(-1), numpy.array(rewardarr).reshape(-1), entropy,
                         actor_loss, critic_loss, nupdates,
                         frames, approxkl, clipfrac, variance, zip(*debug))
