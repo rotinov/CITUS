@@ -5,4 +5,4 @@ mpi4py
 Tensorboard
 numpy
 torch
-cv2
+opencv-python
