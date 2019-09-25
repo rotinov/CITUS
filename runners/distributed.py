@@ -9,10 +9,12 @@ from collections import deque
 
 
 class Distributed:
-    def __init__(self, env, algo: algos.base.BaseAlgo.__class__ = algos.PPO, nn=nns.MLP):
+    def __init__(self, env, algo: algos.base.BaseAlgo.__class__ = algos.PPO, nn=nns.MLP, cnfg=None):
         self.env = env
 
         self.cnfg, self.env_type = algo.get_config(env)
+        if cnfg is not None:
+            self.cnfg = cnfg
 
         # self.communication = Communications()
         self.communication = MPI.COMM_WORLD

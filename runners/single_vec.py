@@ -10,9 +10,11 @@ import numpy
 class SingleVec:
     def __init__(self, env, env_one,
                  algo: algos.base.BaseAlgo.__class__ = algos.PPO,
-                 nn=nns.MLP, workers_num=1, all_cuda=False):
+                 nn=nns.MLP, cnfg=None, workers_num=1, all_cuda=False):
         self.env = env
         self.cnfg, self.env_type = algo.get_config(env_one)
+        if cnfg is not None:
+            self.cnfg = cnfg
         print(self.env_type)
         self.workers_num = workers_num
 

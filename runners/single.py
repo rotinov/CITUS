@@ -7,9 +7,11 @@ from torch import cuda
 
 
 class Single:
-    def __init__(self, env, algo: algos.base.BaseAlgo.__class__ = algos.PPO, nn=nns.MLP):
+    def __init__(self, env, algo: algos.base.BaseAlgo.__class__ = algos.PPO, nn=nns.MLP, cnfg=None):
         self.env = env
         self.cnfg, self.env_type = algo.get_config(env)
+        if cnfg is not None:
+            self.cnfg = cnfg
         print(self.env_type)
 
         self.worker = algo(nn, env.observation_space, env.action_space, self.cnfg, trainer=False)
