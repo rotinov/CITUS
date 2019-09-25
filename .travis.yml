@@ -6,7 +6,8 @@ services:
     - docker
 
 install:
-    - pip install flake8
+    - pip install gym
+    - pip install gym[atari]
     - docker build -t agnes-test .
 
 script:
