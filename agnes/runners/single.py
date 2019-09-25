@@ -1,15 +1,15 @@
 from collections import deque
-import nns
-import algos
-from common import logger
+import agnes.nns
+import agnes.algos
+from agnes.common import logger
 from torch import cuda
 import numpy
 
 
 class Single:
     def __init__(self, env,
-                 algo: algos.base.BaseAlgo.__class__ = algos.PPO,
-                 nn=nns.MLP, env_type=None, cnfg=None, workers_num=1, all_cuda=False):
+                 algo: agnes.algos.base.BaseAlgo.__class__ = agnes.algos.PPO,
+                 nn=agnes.nns.MLP, env_type=None, cnfg=None, workers_num=1, all_cuda=False):
         self.env = env
         if env_type is None:
             env_type = env

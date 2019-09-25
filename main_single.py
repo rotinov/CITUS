@@ -1,8 +1,6 @@
-import algos
-import nns
-import runners
-from common.envs_prep import *
-from common import logger
+from agnes import algos, nns, runners
+from agnes.common.envs_prep import *
+from agnes.common import logger
 import time
 
 
