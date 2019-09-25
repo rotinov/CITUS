@@ -24,6 +24,5 @@ def test_config():
 env = gym.make('CartPole-v0')
 
 runner = runners.Single(env, algos.PPO, nns.MLP, cnfg=test_config())
-runner.log(logger.TensorboardLogger(), logger.log)
 runner.run()
 del runner
