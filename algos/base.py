@@ -20,10 +20,7 @@ class BaseAlgo(metaclass=ABCMeta):
     _nnet: torch.nn.Module
 
     @abstractmethod
-    def __init__(self, nn,
-                 observation_space,
-                 action_space,
-                 cnfg):
+    def __init__(self, *args):
         pass
 
     def __call__(self, state):

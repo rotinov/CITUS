@@ -1,0 +1,13 @@
+language: python
+python:
+    - "3.6"
+
+services:
+    - docker
+
+install:
+    - pip install flake8
+    - docker build -t agnes-test .
+
+script:
+    - docker run --rm agnes-test python test.py

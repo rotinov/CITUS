@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.distributions import Categorical, Normal
-from common.init_weights import weights_init
+from common.init_weights import get_weights_init
 from gym import spaces
 import numpy
 
@@ -54,7 +54,8 @@ class MLPDiscrete(nn.Module):
         action = dist.sample()
 
         state_value = self.critic_head(x)
-        return action.detach().cpu().numpy(), action.detach().cpu().numpy(), (dist.log_prob(action).detach().cpu().numpy(), state_value.detach().cpu().numpy())
+        return action.detach().cpu().numpy(), action.detach().cpu().numpy(), (
+            dist.log_prob(action).detach().cpu().numpy(), state_value.detach().cpu().numpy())
 
 
 class MLPContinuous(nn.Module):
@@ -75,7 +76,7 @@ class MLPContinuous(nn.Module):
 
         self.log_std = nn.Parameter(torch.ones(action_space.shape[0]) * logstd)
 
-        self.apply(weights_init)
+        self.apply(get_weights_init('tanh'))
 
     def forward(self, x):
         compressed = False
@@ -83,7 +84,7 @@ class MLPContinuous(nn.Module):
             compressed = True
             f = x.shape[0]
             s = x.shape[1]
-            x = x.view(f*s, x.shape[2])
+            x = x.view(f * s, x.shape[2])
 
         state_value = self.critic_head(x)
 
@@ -104,7 +105,7 @@ class MLPContinuous(nn.Module):
             compressed = True
             f = x.shape[0]
             s = x.shape[1]
-            x = x.view(f*s, x.shape[2])
+            x = x.view(f * s, x.shape[2])
 
         state_value = self.critic_head(x).detach()
 
