@@ -114,8 +114,8 @@ class PPO(base.BaseAlgo):
         # Tensors
         t_states = torch.FloatTensor(states).to(self._device)
         t_actions = torch.from_numpy(numpy.array(actions, dtype=self._nnet.np_type)).to(self._device)
-        t_new_state_old_vals = torch.FloatTensor(new_state_old_vals).to(self._device)
         t_rewards = torch.FloatTensor(rewards).to(self._device)
+        t_new_state_old_vals = torch.FloatTensor(new_state_old_vals).to(self._device).reshape(t_rewards.shape)
         t_dones = torch.FloatTensor(dones).to(self._device)
         t_old_log_probs = torch.from_numpy(numpy.array(old_log_probs, dtype=numpy.float32)).to(self._device)
         t_state_old_vals = torch.FloatTensor(old_vals).to(self._device)
@@ -165,6 +165,7 @@ class PPO(base.BaseAlgo):
 
         n_rewards = numpy.array(rewards)
         n_dones = numpy.array(dones)
+        n_shape = n_dones.shape
 
         n_state_vals = numpy.array(old_vals)
         n_new_state_vals = numpy.array(old_vals)
@@ -173,9 +174,11 @@ class PPO(base.BaseAlgo):
         with torch.no_grad():
             t_nstates = torch.FloatTensor(nstates[-1]).to(self._device)
             n_new_state_vals[-1] = self._nnet(t_nstates)[1].detach().squeeze(-1).cpu().numpy()
+            n_new_state_vals = n_new_state_vals.reshape(n_shape)
+            n_state_vals = n_state_vals.reshape(n_shape)
 
         # Making td residual
-        td_residual = - n_state_vals + n_rewards + self.gamma * (1. - n_dones) * n_new_state_vals
+        td_residual = - n_state_vals.reshape(n_shape) + n_rewards + self.gamma * (1. - n_dones) * n_new_state_vals
 
         # Making GAE from td residual
         n_advs = list(self._gae(td_residual, n_dones))
@@ -199,10 +202,10 @@ class PPO(base.BaseAlgo):
         # Making critic losses
         t_state_vals_clipped = t_state_old_vals + torch.clamp(t_state_vals - t_state_old_vals, - self.cliprange,
                                                               self.cliprange)
-        t_critic_loss1 = self.lossfun(t_state_vals, t_target_state_vals)
+        t_critic_loss1 = self.lossfun(t_state_vals.squeeze(-1), t_target_state_vals)
 
         # Making critic final loss
-        t_critic_loss2 = self.lossfun(t_state_vals_clipped, t_target_state_vals)
+        t_critic_loss2 = self.lossfun(t_state_vals_clipped.squeeze(-1), t_target_state_vals)
         t_critic_loss = .5 * torch.max(t_critic_loss1, t_critic_loss2).mean()
 
         # Normalizing advantages

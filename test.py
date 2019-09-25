@@ -24,5 +24,6 @@ env = gym.make('CartPole-v0')
 
 runner = runners.Single(env, algos.PPO, nns.MLP, cnfg=test_config())
 runner.run()
+del runner
 
 quit(0)
