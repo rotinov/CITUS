@@ -1,5 +1,5 @@
-from algos import PPO
+from agnes.algos import PPO
 
-from nns import MLP, CNN
+from agnes.nns import MLP, CNN
 
-from runners import Single, SingleVec, Distributed
+from agnes.runners import Single, Distributed

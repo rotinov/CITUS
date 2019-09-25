@@ -2,10 +2,10 @@ import torch
 import numpy
 import random
 import gym
-from algos import base
-from common import schedules
+from agnes.algos import base
+from agnes.common import schedules
 from pprint import pprint
-from algos.configs.ppo_config import get_config
+from agnes.algos.configs.ppo_config import get_config
 
 
 class Buffer(base.BaseBuffer):

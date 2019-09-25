@@ -8,9 +8,9 @@
 * Single
 
 ```python
-from nns import MLP
-from algos import PPO
-from runners import Single
+from agnes.nns import MLP
+from agnes.algos import PPO
+from agnes.runners import Single
 import gym
 
 env = gym.make("InvertedDoublePendulum-v2")
@@ -22,9 +22,9 @@ runner = Single(env, PPO, MLP)
 
 ```python
 
-from nns import MLP
-from algos import PPO
-from runners import Distributed
+from agnes.nns import MLP
+from agnes.algos import PPO
+from agnes.runners import Distributed
 
 runner = Distributed(env, PPO, MLP)
 
@@ -34,9 +34,9 @@ runner = Distributed(env, PPO, MLP)
 * PPO
 Proximal Policy Optimization is implemented in this framework and can be used simply:
 ```python
-from nns import MLP
-from algos import PPO
-from runners import Single
+from agnes.nns import MLP
+from agnes.algos import PPO
+from agnes.runners import Single
 
 runner = Single(env, PPO, MLP)
 
@@ -46,9 +46,9 @@ runner = Single(env, PPO, MLP)
 
 * Multi Layer Perceptron
 ```python
-from nns import MLP
-from algos import PPO
-from runners import Single
+from agnes.nns import MLP
+from agnes.algos import PPO
+from agnes.runners import Single
 
 runner = Single(env, PPO, MLP)
 
@@ -56,9 +56,9 @@ runner = Single(env, PPO, MLP)
 
 * Convolutional Neural Network
 ```python
-from nns import CNN
-from algos import PPO
-from runners import Single
+from agnes.nns import CNN
+from agnes.algos import PPO
+from agnes.runners import Single
 
 runner = Single(env, PPO, CNN)
 
