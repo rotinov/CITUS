@@ -7,6 +7,7 @@ services:
 
 install:
     - pip install flake8
+    - docker build . -t baselines-test
 
 script:
-    - docker run -it --rm --name agnes-test -v "$PWD":. python:3 python __init__.py
+    - docker run -it --rm --name agnes-test -v "$PWD":/home/travis/build/rotinov/AGNES/ python:3 python __init__.py
