@@ -20,14 +20,15 @@ def test_config():
 
 
 def test_single():
-    env = gym.make('LunarLanderContinuous-v2')
+    env = gym.make('Pendulum-v0')
 
     runner = agnes.runners.Single(env, agnes.algos.PPO, agnes.nns.MLP, cnfg=test_config())
     runner.run()
 
 
 def test_vec():
-    envs, env, workers_num = wrap_vec_gym('LunarLanderContinuous-v2')
+    envs, env, workers_num = wrap_vec_gym('Pendulum-v0')
 
     runner = agnes.runners.Single(envs, agnes.algos.PPO, agnes.nns.MLP, cnfg=test_config(), workers_num=workers_num)
+    runner.log(agnes.log)
     runner.run()

@@ -1,6 +1,5 @@
 import agnes
 from agnes.common.envs_prep import *
-from agnes.common import logger
 import time
 
 
@@ -14,5 +13,5 @@ if __name__ == '__main__':
 
     runner = agnes.runners.Single(envs, agnes.algos.PPO, agnes.nns.MLP,
                                   env_type='mujoco', workers_num=num_envs, all_cuda=False)
-    runner.log(logger.log, logger.TensorboardLogger(".logs/"+str(time.time())))
+    runner.log(agnes.log, agnes.TensorboardLogger(".logs/"+str(time.time())))
     runner.run()
