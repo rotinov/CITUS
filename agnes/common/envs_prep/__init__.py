@@ -26,8 +26,7 @@ def wrap_vec_atari(env_name, envs_num=multiprocessing.cpu_count()):
 def wrap_vec_gym(env_name, envs_num=multiprocessing.cpu_count()):
     def make_env():
         def _thunk():
-            env = gym.make(env_name)
-            return env
+            return gym.make(env_name)
 
         return _thunk
 

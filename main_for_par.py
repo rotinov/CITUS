@@ -1,6 +1,4 @@
-import agnes.algos
-import agnes.nns
-import agnes.runners
+import agnes
 import torch
 from agnes.common.envs_prep.atari_wrappers import wrap_deepmind, make_atari
 

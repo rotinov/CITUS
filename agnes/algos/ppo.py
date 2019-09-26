@@ -111,14 +111,24 @@ class PPO(base.BaseAlgo):
         states, actions, new_state_old_vals, rewards, dones, old_log_probs, old_vals, advs = zip(*data)
 
         # Tensors
-        t_states = torch.FloatTensor(states).to(self._device)
-        t_actions = torch.from_numpy(numpy.array(actions, dtype=self._nnet.np_type)).to(self._device)
-        t_rewards = torch.FloatTensor(rewards).to(self._device)
-        t_new_state_old_vals = torch.FloatTensor(new_state_old_vals).to(self._device).reshape(t_rewards.shape)
-        t_dones = torch.FloatTensor(dones).to(self._device)
-        t_old_log_probs = torch.from_numpy(numpy.array(old_log_probs, dtype=numpy.float32)).to(self._device)
-        t_state_old_vals = torch.FloatTensor(old_vals).to(self._device)
-        t_advs = torch.FloatTensor(advs).to(self._device)
+        if self._device == 'cpu':
+            t_states = torch.FloatTensor(states)
+            t_actions = torch.from_numpy(numpy.array(actions, dtype=self._nnet.np_type))
+            t_rewards = torch.FloatTensor(rewards)
+            t_new_state_old_vals = torch.FloatTensor(new_state_old_vals).reshape(t_rewards.shape)
+            t_dones = torch.FloatTensor(dones)
+            t_old_log_probs = torch.from_numpy(numpy.array(old_log_probs, dtype=numpy.float32))
+            t_state_old_vals = torch.FloatTensor(numpy.array(old_vals, dtype=numpy.float32))
+            t_advs = torch.FloatTensor(advs)
+        else:
+            t_states = torch.cuda.FloatTensor(states)
+            t_actions = torch.from_numpy(numpy.array(actions, dtype=self._nnet.np_type)).to(self._device)
+            t_rewards = torch.cuda.FloatTensor(rewards)
+            t_new_state_old_vals = torch.cuda.FloatTensor(new_state_old_vals).reshape(t_rewards.shape)
+            t_dones = torch.cuda.FloatTensor(dones)
+            t_old_log_probs = torch.from_numpy(numpy.array(old_log_probs, dtype=numpy.float32)).to(self._device)
+            t_state_old_vals = torch.cuda.FloatTensor(numpy.array(old_vals, dtype=numpy.float32))
+            t_advs = torch.cuda.FloatTensor(advs)
 
         indexes = [i for i in range(len(data))]
 
@@ -130,6 +140,7 @@ class PPO(base.BaseAlgo):
                              t_rewards[ind_minibatch], t_dones[ind_minibatch], t_old_log_probs[ind_minibatch],
                              t_state_old_vals[ind_minibatch], t_advs[ind_minibatch])
                 info.append(self._one_train(minibatch))
+
         return info
 
     def update(self, from_agent: base.BaseAlgo):
@@ -184,7 +195,27 @@ class PPO(base.BaseAlgo):
 
         l_new_state_vals = list(n_new_state_vals)
 
-        transitions = (states, actions, l_new_state_vals, rewards, dones, old_log_probs, old_vals, n_advs)
+        if n_rewards.ndim == 1:
+            transitions = (states, actions, l_new_state_vals, rewards, dones, old_log_probs, old_vals, n_advs)
+        else:
+            li_states = []
+            li_actions = []
+            li_new_state_vals = []
+            li_rewards = []
+            li_dones = []
+            li_old_log_probs = []
+            li_old_vals = []
+            li_n_advs = []
+            for i in range(len(states)):
+                li_states.extend(list(states[i]))
+                li_actions.extend(list(actions[i]))
+                li_new_state_vals.extend(list(l_new_state_vals[i]))
+                li_rewards.extend(list(rewards[i]))
+                li_dones.extend(list(dones[i]))
+                li_old_log_probs.extend(list(old_log_probs[i]))
+                li_old_vals.extend(list(old_vals[i]))
+                li_n_advs.extend(list(n_advs[i]))
+            transitions = (li_states, li_actions, li_new_state_vals, li_rewards, li_dones, li_old_log_probs, li_old_vals, li_n_advs)
 
         return list(zip(*transitions))
 
@@ -193,29 +224,29 @@ class PPO(base.BaseAlgo):
 
         # Feedforward with building computation graph
         t_distrib, t_state_vals_un = self._nnet(t_states)
-        t_state_vals = t_state_vals_un
+        t_state_vals = t_state_vals_un.squeeze(-1)
 
         # Making target for value update and for td residual
         t_target_state_vals = t_rewards + self.gamma * (1. - t_dones) * t_new_state_old_vals
 
         # Making critic losses
-        t_state_vals_clipped = t_state_old_vals + torch.clamp(t_state_vals - t_state_old_vals, - self.cliprange,
-                                                              self.cliprange)
-        t_critic_loss1 = self.lossfun(t_state_vals.squeeze(-1), t_target_state_vals)
+        t_state_vals_clipped = t_state_old_vals.view_as(t_state_vals) + \
+                               torch.clamp(t_state_vals - t_state_old_vals.view_as(t_state_vals), - self.cliprange, self.cliprange)
+        t_critic_loss1 = self.lossfun(t_state_vals, t_target_state_vals)
 
         # Making critic final loss
-        t_critic_loss2 = self.lossfun(t_state_vals_clipped.squeeze(-1), t_target_state_vals)
+        t_critic_loss2 = self.lossfun(t_state_vals_clipped, t_target_state_vals)
         t_critic_loss = .5 * torch.max(t_critic_loss1, t_critic_loss2).mean()
 
         # Normalizing advantages
         # t_advantages = t_advs
-        t_advantages = ((t_advs - t_advs.mean()) / (t_advs.std() + 1e-8)).view(-1)
+        t_advantages = ((t_advs - t_advs.mean()) / (t_advs.std() + 1e-8)).unsqueeze(-1)
 
         # Getting log probs
         t_new_log_probs = t_distrib.log_prob(t_actions)
 
         # Calculating ratio
-        t_ratio = torch.exp(t_new_log_probs - t_old_log_probs).view(-1)
+        t_ratio = torch.exp(t_new_log_probs - t_old_log_probs)
 
         approxkl = (.5 * torch.mean((t_old_log_probs - t_new_log_probs).pow(2))).item()
         clipfrac = torch.mean((torch.abs(t_ratio - 1.0) > self.cliprange).float()).item()
@@ -224,7 +255,6 @@ class PPO(base.BaseAlgo):
         t_rt1 = torch.mul(t_advantages, t_ratio)
         t_rt2 = torch.mul(t_advantages, torch.clamp(t_ratio, 1 - self.cliprange, 1 + self.cliprange))
         t_actor_loss = torch.min(t_rt1, t_rt2).mean()
-        # t_actor_loss = (torch.mul(t_advantages.unsqueeze(-1), t_ratio)).mean()
 
         # Calculating entropy
         t_entropy = t_distrib.entropy().mean()

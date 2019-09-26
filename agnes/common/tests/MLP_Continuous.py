@@ -1,5 +1,6 @@
 import agnes
 import gym
+from agnes.common.envs_prep import wrap_vec_gym
 
 
 def test_config():
@@ -19,7 +20,14 @@ def test_config():
 
 
 def test_single():
-    env = gym.make('CartPole-v0')
+    env = gym.make('LunarLanderContinuous-v2')
 
     runner = agnes.runners.Single(env, agnes.algos.PPO, agnes.nns.MLP, cnfg=test_config())
+    runner.run()
+
+
+def test_vec():
+    envs, env, workers_num = wrap_vec_gym('LunarLanderContinuous-v2')
+
+    runner = agnes.runners.Single(envs, agnes.algos.PPO, agnes.nns.MLP, cnfg=test_config(), workers_num=workers_num)
     runner.run()

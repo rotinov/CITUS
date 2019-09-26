@@ -11,10 +11,7 @@ class StandardLogger:
     def __init__(self):
         self.beg_time = time.time()
 
-    def __call__(self, eplenmean, rewardarr,
-                 entropy, actor_loss, critic_loss,
-                 nupdates, frames, approxkl, clipfrac, variance,
-                 debug):
+    def __call__(self, eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, approxkl, clipfrac, variance, debug):
 
         print('-' * 43)
         print('| eplenmean:               |', '{: 10.2f}'.format(safemean(eplenmean)).rjust(10, ' '), '  |',
