@@ -1,12 +1,14 @@
 from collections import deque
-import agnes.nns
-import agnes.algos
+import agnes
 from agnes.common import logger
 from torch import cuda
 import numpy
 
 
 class Single:
+    """"Single" runner releases learning with a single worker that is also a trainer.
+    "Single" runner is compatible with vector environments(config or env_type should be specified manually).
+    """
     def __init__(self, env,
                  algo: agnes.algos.base.BaseAlgo.__class__ = agnes.algos.PPO,
                  nn=agnes.nns.MLP, env_type=None, cnfg=None, workers_num=1, all_cuda=False):
@@ -20,15 +22,9 @@ class Single:
         print(self.env_type)
         self.workers_num = workers_num
 
-        self.worker = algo(nn, env.observation_space, env.action_space, self.cnfg, trainer=False, workers=1)
-
-        self.trainer = algo(nn, env.observation_space, env.action_space, self.cnfg)
+        self.trainer = algo(nn, env.observation_space, env.action_space, self.cnfg, workers=workers_num)
         if cuda.is_available():
             self.trainer = self.trainer.to('cuda:0')
-            if all_cuda:
-                self.trainer.to('cuda:0')
-
-        self.worker.update(self.trainer)
 
         self.logger = logger.ListLogger()
 
@@ -52,13 +48,13 @@ class Single:
 
         while frames < timesteps:
 
-            action, pred_action, out = self.worker(state)
+            action, pred_action, out = self.trainer(state)
 
             nstate, reward, done, _ = self.env.step(action)
             rewardsum += numpy.array(reward)
 
             transition = (state, pred_action, nstate, reward, done, out)
-            data = self.worker.experience(transition)
+            data = self.trainer.experience(transition)
 
             if data:
                 if self.logger.is_active():
@@ -66,8 +62,6 @@ class Single:
                 lr_thing = self.trainer.train(data)
                 lr_things.extend(lr_thing)
                 nupdates += 1
-
-                self.worker.update(self.trainer)
 
                 if nupdates % log_interval == 0 and lr_things:
                     actor_loss, critic_loss, entropy, approxkl, clipfrac, variance, debug = zip(*lr_things)
@@ -103,4 +97,4 @@ class Single:
 
         del self.env
         del self.logger
-        del self.worker
+        del self.trainer

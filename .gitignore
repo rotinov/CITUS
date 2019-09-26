@@ -2,3 +2,4 @@
 *.pyc
 .logs/
 *.py___jb_tmp___
+*.pstat

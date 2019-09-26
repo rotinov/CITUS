@@ -109,22 +109,21 @@ class MLPContinuous(nn.Module):
             state_value = state_value.view(-1)
 
         std = self.log_std.expand_as(mu).exp()
-        dist = Normal(mu, std)
+        dist = Normal(mu.squeeze(0), std.squeeze(0))
 
-        return dist, state_value
+        return dist, state_value.squeeze(0)
 
     def get_action(self, x):
         if x.ndimension() < 2:
             x.unsqueeze_(0)
-        dist, _ = self.forward(x)
+        dist, state_value = self.forward(x)
         smpled = dist.sample()
         action = torch.clamp(smpled, self.action_space.low[0], self.action_space.high[0])
 
-        state_value = self.critic_head(x)
         return action.detach().cpu().numpy(), \
                smpled.detach().cpu().numpy(), \
                (dist.log_prob(smpled).detach().cpu().numpy(),
-                state_value.detach().squeeze(-1).cpu().numpy())
+                state_value.detach().cpu().numpy())
 
 
 def MLP(observation_space=spaces.Box(low=-10, high=10, shape=(1,)),
