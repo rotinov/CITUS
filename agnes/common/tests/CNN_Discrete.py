@@ -1,6 +1,5 @@
 import agnes
 from agnes.common.envs_prep import *
-from agnes.common import logger
 
 
 def test_config():
@@ -25,5 +24,5 @@ def test_single():
     envs, env, num_envs = wrap_vec_atari(env_name, envs_num=2)
 
     runner = agnes.runners.Single(envs, agnes.algos.PPO, agnes.nns.CNN, workers_num=num_envs, all_cuda=False, cnfg=test_config())
-    runner.log(logger.TensorboardLogger(), logger.log)
+    runner.log(agnes.TensorboardLogger(), agnes.log)
     runner.run()
