@@ -111,7 +111,7 @@ class PPO(base.BaseAlgo):
         states, actions, new_state_old_vals, rewards, dones, old_log_probs, old_vals, advs = zip(*data)
 
         # Tensors
-        if self._device == 'cpu':
+        if self._device == torch.device('cpu'):
             t_states = torch.FloatTensor(states)
             t_actions = torch.from_numpy(numpy.array(actions, dtype=self._nnet.np_type))
             t_rewards = torch.FloatTensor(rewards)
