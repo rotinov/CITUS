@@ -110,11 +110,92 @@ class Cnn(nn.Module):
         return self.head(cv)
 
 
+class CNNDiscreteCopy(nn.Module):
+    def __init__(self, action_space=spaces.Discrete(5), policy_fn=None, value_fn=None):
+        super(CNNDiscreteCopy, self).__init__()
+        self.action_space = action_space
+
+        self.conv = CnnBody()
+
+        # actor's layer
+        if policy_fn is None:
+            self.actor_head = nn.Sequential(CnnBody(),
+                                            CnnHead(action_space.n),
+                                            nn.Softmax(-1))
+        else:
+            self.actor_head = nn.Sequential(policy_fn(action_space.n),
+                                            nn.Softmax(-1))
+
+        # critic's layer
+        if value_fn is None:
+            self.critic_head = nn.Sequential(CnnBody(),
+                                             CnnHead(1))
+        else:
+            self.critic_head = value_fn(1)
+
+        self.apply(get_weights_init('relu'))
+
+    @staticmethod
+    def type_of_out():
+        return torch.int16
+
+    def forward(self, x):
+        compressed = False
+        if x.ndimension() == 5:
+            compressed = True
+            f = x.shape[0]
+            s = x.shape[1]
+            x = x.view(f * s, x.shape[2], x.shape[3], x.shape[4])
+
+        xt = x.permute(0, 3, 1, 2)
+
+        state_value = self.critic_head(xt)
+
+        policy = self.actor_head(xt)
+
+        if compressed:
+            state_value = state_value.view(f, s)
+            policy = policy.view(f, s, -1)
+
+        dist = Categorical(policy)
+
+        return dist, state_value
+
+    def get_value(self, x):
+        compressed = False
+        if x.ndimension() == 5:
+            compressed = True
+            f = x.shape[0]
+            s = x.shape[1]
+            x = x.view(f * s, x.shape[2], x.shape[3], x.shape[4])
+
+        xt = x.permute(0, 3, 1, 2)
+
+        state_value = self.critic_head(xt).detach()
+
+        if compressed:
+            state_value = state_value.view(f, s)
+        else:
+            state_value.squeeze(-1)
+
+        return state_value.cpu().numpy()
+
+    def get_action(self, x: torch.FloatTensor):
+        if x.ndimension() < 4:
+            x.unsqueeze_(0)
+
+        dist, state_value = self.forward(x)
+        action = dist.sample()
+
+        return action.detach().cpu().numpy(), \
+               action.detach().cpu().numpy(), \
+               (dist.log_prob(action).detach().cpu().numpy(),
+                state_value.detach().squeeze(-1).cpu().numpy())
+
+
 class CNNDiscreteShared(nn.Module):
 
-    def __init__(self,
-                 observation_space=spaces.Box(low=-10, high=10, shape=(1,)),
-                 action_space=spaces.Discrete(5)):
+    def __init__(self, action_space=spaces.Discrete(5)):
         super(CNNDiscreteShared, self).__init__()
         self.action_space = action_space
 
@@ -190,7 +271,26 @@ class CNNDiscreteShared(nn.Module):
                 state_value.detach().squeeze(-1).cpu().numpy())
 
 
-def CNN(observation_space=spaces.Box(low=-10, high=10, shape=(1,)),
-        action_space=spaces.Discrete(5),
-        logstd=0.0, simple=False):
-    return CNNDiscreteShared(observation_space, action_space)
+class CNNChooser:
+    def __init__(self, shared=True, policy_nn=None, value_nn=None):
+        if shared:
+            if policy_nn is not None or value_nn is not None:
+                raise NameError('Shared network with custom layers is not supported for now.')
+
+            self.nn = CNNDiscreteShared
+        else:
+            self.nn = CNNDiscreteCopy
+            self.policy_nn = policy_nn
+            self.value_nn = value_nn
+
+    def __call__(self, observation_space, action_space):
+        if isinstance(action_space, spaces.Box):
+            raise NameError('Continuous environments are not supported yet.')
+
+        if self.nn == CNNDiscreteShared:
+            return self.nn(action_space)
+        else:
+            return self.nn(action_space, self.policy_nn, self.value_nn)
+
+
+CNN = CNNChooser()

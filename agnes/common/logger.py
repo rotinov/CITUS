@@ -13,10 +13,13 @@ class StandardLogger:
 
     def __call__(self, eplenmean, rewardarr, entropy, actor_loss, critic_loss,
                  nupdates, frames, approxkl, clipfrac, variance, debug):
+        time_now = time.time()
 
         print('-' * 43)
         print('| eplenmean:               |', '{: 10.2f}'.format(safemean(eplenmean)).rjust(10, ' '), '  |',
               '\n| eprewmean:               |', '{: 10.2f}'.format(safemean(rewardarr)).rjust(10, ' '), '  |',
+              '\n| fps:                     |', '{: 10.2f}'.format(
+                frames / max(1e-8, float(time_now - self.b_time))).rjust(10, ' '), '  |',
               '\n| loss/approxkl:           |', '{: .2e}'.format(safemean(approxkl)).rjust(10, ' '), '  |',
               '\n| loss/clipfrac:           |', '{: .2e}'.format(safemean(clipfrac)).rjust(10, ' '), '  |',
               '\n| loss/policy_entropy:     |', '{: .2e}'.format(safemean(entropy)).rjust(10, ' '), '  |',
@@ -25,7 +28,7 @@ class StandardLogger:
               '\n| misc/explained_variance: |', '{: .2e}'.format(safemean(variance)).rjust(10, ' '), '  |',
               '\n| misc/nupdates:           |', '{: .2e}'.format(nupdates).rjust(10, ' '), '  |',
               '\n| misc/serial_timesteps:   |', '{: .2e}'.format(frames).rjust(10, ' '), '  |',
-              '\n| misc/time_elapsed:       |', '{: .2e}'.format(int(time.time() - self.b_time)).rjust(10, ' '), '  |')
+              '\n| misc/time_elapsed:       |', '{: .2e}'.format(int(time_now - self.b_time)).rjust(10, ' '), '  |')
 
         i = 1
         for item in debug:
@@ -41,7 +44,7 @@ log = StandardLogger()
 class TensorboardLogger:
     def __init__(self, path=".logs/"+str(time.time())):
         self.writer = SummaryWriter(log_dir=path)
-        self.beg_time = time.time()
+        self.b_time = time.time()
 
     def __call__(self, eplenmean, rewardarr, entropy, actor_loss, critic_loss,
                  nupdates, frames, approxkl, clipfrac, variance, debug):
@@ -49,7 +52,7 @@ class TensorboardLogger:
 
         self.writer.add_scalar("eplenmean", safemean(eplenmean), nupdates)
         self.writer.add_scalar("eprewmean", safemean(rewardarr), nupdates)
-        self.writer.add_scalar("fps", frames / max(1e-8, float(time_now - self.beg_time)), nupdates)
+        self.writer.add_scalar("fps", frames / max(1e-8, float(time_now - self.b_time)), nupdates)
 
         self.writer.add_scalar("loss/approxkl", safemean(approxkl), nupdates)
         self.writer.add_scalar("loss/clipfrac", safemean(clipfrac), nupdates)
@@ -60,7 +63,7 @@ class TensorboardLogger:
         self.writer.add_scalar("misc/explained_variance", safemean(variance), nupdates)
         self.writer.add_scalar("misc/nupdates", nupdates, nupdates)
         self.writer.add_scalar("misc/serial_timesteps", frames, nupdates)
-        self.writer.add_scalar("misc/time_elapsed", float(time_now - self.beg_time), nupdates)
+        self.writer.add_scalar("misc/time_elapsed", float(time_now - self.b_time), nupdates)
 
         i = 1
         for item in debug:
@@ -80,12 +83,13 @@ class ListLogger:
     def __call__(self, eplenmean, rewardarr, entropy, actor_loss, critic_loss,
                  nupdates, frames, approxkl, clipfrac, variance, debug):
         data = (eplenmean, rewardarr, entropy, actor_loss, critic_loss,
-                nupdates, frames, approxkl, clipfrac, variance, debug)
+                nupdates, frames, approxkl, clipfrac, variance, list(debug))
         for logger in self.loggers:
             logger(*data)
 
     def __del__(self):
-        del self.loggers
+        if len(self.loggers) != 0:
+            del self.loggers
 
     def is_active(self):
         return len(self.loggers) != 0
