@@ -9,12 +9,17 @@ def safemean(xs):
 
 class StandardLogger:
     def __init__(self):
-        self.beg_time = time.time()
+        self.b_time = time.time()
 
+<<<<<<< Updated upstream:common/logger.py
     def __call__(self, eplenmean, rewardarr,
                  entropy, actor_loss, critic_loss,
                  nupdates, frames, approxkl, clipfrac, variance,
                  debug):
+=======
+    def __call__(self, eplenmean, rewardarr, entropy, actor_loss, critic_loss,
+                 nupdates, frames, approxkl, clipfrac, variance, debug):
+>>>>>>> Stashed changes:agnes/common/logger.py
 
         print('-' * 43)
         print('| eplenmean:               |', '{: 10.2f}'.format(safemean(eplenmean)).rjust(10, ' '), '  |',
@@ -27,7 +32,7 @@ class StandardLogger:
               '\n| misc/explained_variance: |', '{: .2e}'.format(safemean(variance)).rjust(10, ' '), '  |',
               '\n| misc/nupdates:           |', '{: .2e}'.format(nupdates).rjust(10, ' '), '  |',
               '\n| misc/serial_timesteps:   |', '{: .2e}'.format(frames).rjust(10, ' '), '  |',
-              '\n| misc/time_elapsed:       |', '{: .2e}'.format(int(time.time() - self.beg_time)).rjust(10, ' '), '  |')
+              '\n| misc/time_elapsed:       |', '{: .2e}'.format(int(time.time() - self.b_time)).rjust(10, ' '), '  |')
 
         i = 1
         for item in debug:
@@ -46,7 +51,8 @@ class TensorboardLogger:
         self.beg_time = time.time()
         log.beg_time = self.beg_time
 
-    def __call__(self, eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, approxkl, clipfrac, variance, debug):
+    def __call__(self, eplenmean, rewardarr, entropy, actor_loss, critic_loss,
+                 nupdates, frames, approxkl, clipfrac, variance, debug):
         time_now = time.time()
         log(eplenmean, rewardarr, entropy, actor_loss, critic_loss, nupdates, frames, approxkl, clipfrac, variance, debug)
 
@@ -74,3 +80,24 @@ class TensorboardLogger:
 
     def __del__(self):
         self.writer.close()
+<<<<<<< Updated upstream:common/logger.py
+=======
+
+
+class ListLogger:
+    def __init__(self, args=[]):
+        self.loggers = args
+
+    def __call__(self, eplenmean, rewardarr, entropy, actor_loss, critic_loss,
+                 nupdates, frames, approxkl, clipfrac, variance, debug):
+        data = (eplenmean, rewardarr, entropy, actor_loss, critic_loss,
+                nupdates, frames, approxkl, clipfrac, variance, debug)
+        for logger in self.loggers:
+            logger(*data)
+
+    def __del__(self):
+        del self.loggers
+
+    def is_active(self):
+        return len(self.loggers) != 0
+>>>>>>> Stashed changes:agnes/common/logger.py

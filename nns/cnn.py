@@ -7,8 +7,6 @@ import numpy
 
 
 class CnnSmallBody(nn.Module):
-    cnn_out_size = 16 * 9 * 9
-
     def __init__(self):
         super(CnnSmallBody, self).__init__()
 
@@ -44,8 +42,6 @@ class CnnSmallHead(nn.Module):
 
 
 class CnnSmall(nn.Module):
-    cnn_out_size = 16 * 9 * 9
-
     def __init__(self, output):
         super(CnnSmall, self).__init__()
 
@@ -61,8 +57,60 @@ class CnnSmall(nn.Module):
         return self.head(cv)
 
 
+class CnnBody(nn.Module):
+    def __init__(self):
+        super(CnnBody, self).__init__()
+
+        self.conv = nn.Sequential(nn.Conv2d(4, 32, 8, stride=4),
+                                  nn.ReLU(),
+                                  nn.Conv2d(32, 64, 4, stride=2),
+                                  nn.ReLU(),
+                                  nn.Conv2d(64, 64, 3, stride=1),
+                                  nn.ReLU())
+
+    def forward(self, x):
+        # (4, 84, 84)
+        x = x / 255.
+
+        cv = self.conv(x)
+        # (64, 7, 7)
+
+        return cv
+
+
+class CnnHead(nn.Module):
+    cnn_out_size = 64 * 7 * 7
+
+    def __init__(self, output):
+        super(CnnHead, self).__init__()
+
+        self.fc = nn.Sequential(nn.Linear(self.cnn_out_size, 512),
+                                nn.ReLU(),
+                                nn.Linear(512, output))
+
+    def forward(self, cv):
+        cv_f = cv.view(-1, self.cnn_out_size)
+
+        return self.fc(cv_f)
+
+
+class Cnn(nn.Module):
+    def __init__(self, output):
+        super(Cnn, self).__init__()
+
+        self.conv = CnnBody()
+
+        self.head = CnnHead(output)
+
+    def forward(self, x):
+        # (4, 84, 84)
+        cv = self.conv(x)
+        # (64, 7, 7)
+
+        return self.head(cv)
+
+
 class CNNDiscreteShared(nn.Module):
-    np_type = numpy.int16
 
     def __init__(self,
                  observation_space=spaces.Box(low=-10, high=10, shape=(1,)),
@@ -70,16 +118,20 @@ class CNNDiscreteShared(nn.Module):
         super(CNNDiscreteShared, self).__init__()
         self.action_space = action_space
 
-        self.conv = CnnSmallBody()
+        self.conv = CnnBody()
 
         # actor's layer
-        self.actor_head = nn.Sequential(CnnSmallHead(action_space.n),
+        self.actor_head = nn.Sequential(CnnHead(action_space.n),
                                         nn.Softmax(-1))
 
         # critic's layer
-        self.critic_head = CnnSmallHead(1)
+        self.critic_head = CnnHead(1)
 
         self.apply(get_weights_init('relu'))
+
+    @staticmethod
+    def type_of_out():
+        return torch.int16
 
     def forward(self, x):
         compressed = False

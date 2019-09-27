@@ -7,10 +7,20 @@ from torch import cuda
 import numpy
 
 
+<<<<<<< Updated upstream:runners/single_vec.py
 class SingleVec:
     def __init__(self, env, env_one,
                  algo: algos.base.BaseAlgo.__class__ = algos.PPO,
                  nn=nns.MLP, workers_num=1, all_cuda=False):
+=======
+class Single:
+    """"Single" runner releases learning with a single worker that is also a trainer.
+    "Single" runner is compatible with vector environments(config or env_type should be specified manually).
+    """
+    def __init__(self, env,
+                 algo: agnes.algos.base.BaseAlgo.__class__ = agnes.algos.PPO,
+                 nn=agnes.nns.MLP, env_type=None, cnfg=None, workers_num=1):
+>>>>>>> Stashed changes:agnes/runners/single.py
         self.env = env
         self.cnfg, self.env_type = algo.get_config(env_one)
         print(self.env_type)
@@ -29,6 +39,7 @@ class SingleVec:
         self.logger = logger.TensorboardLogger(".logs/"+str(time.time()))
 
     def run(self, log_interval=1):
+        print(self.trainer.device_info(), 'will be used.')
         timesteps = self.cnfg['timesteps']
 
         frames = 0
