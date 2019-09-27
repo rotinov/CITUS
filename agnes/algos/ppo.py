@@ -88,8 +88,10 @@ class PPO(base.BaseAlgo):
 
     def __call__(self, state):
         with torch.no_grad():
-            return self._nnet.get_action(torch.from_numpy(numpy.array(state, dtype=numpy.float32))
-                                         .to(self._device))
+            if self._device == torch.device('cpu'):
+                return self._nnet.get_action(torch.FloatTensor(state))
+            else:
+                return self._nnet.get_action(torch.cuda.FloatTensor(state))
 
     def experience(self, transition):
         self.buffer.append(transition)
@@ -113,21 +115,27 @@ class PPO(base.BaseAlgo):
         # Tensors
         if self._device == torch.device('cpu'):
             t_states = torch.FloatTensor(states)
-            t_actions = torch.from_numpy(numpy.array(actions, dtype=self._nnet.np_type))
+            if self._nnet.type_of_out == torch.int16:
+                t_actions = torch.LongTensor(actions)
+            else:
+                t_actions = torch.FloatTensor(actions)
             t_rewards = torch.FloatTensor(rewards)
             t_new_state_old_vals = torch.FloatTensor(new_state_old_vals).reshape(t_rewards.shape)
             t_dones = torch.FloatTensor(dones)
-            t_old_log_probs = torch.from_numpy(numpy.array(old_log_probs, dtype=numpy.float32))
-            t_state_old_vals = torch.FloatTensor(numpy.array(old_vals, dtype=numpy.float32))
+            t_old_log_probs = torch.FloatTensor(old_log_probs)
+            t_state_old_vals = torch.FloatTensor(old_vals)
             t_advs = torch.FloatTensor(advs)
         else:
             t_states = torch.cuda.FloatTensor(states)
-            t_actions = torch.from_numpy(numpy.array(actions, dtype=self._nnet.np_type)).to(self._device)
+            if self._nnet.type_of_out == torch.int16:
+                t_actions = torch.cuda.LongTensor(actions)
+            else:
+                t_actions = torch.cuda.FloatTensor(actions)
             t_rewards = torch.cuda.FloatTensor(rewards)
             t_new_state_old_vals = torch.cuda.FloatTensor(new_state_old_vals).reshape(t_rewards.shape)
             t_dones = torch.cuda.FloatTensor(dones)
-            t_old_log_probs = torch.from_numpy(numpy.array(old_log_probs, dtype=numpy.float32)).to(self._device)
-            t_state_old_vals = torch.cuda.FloatTensor(numpy.array(old_vals, dtype=numpy.float32))
+            t_old_log_probs = torch.cuda.FloatTensor(old_log_probs)
+            t_state_old_vals = torch.cuda.FloatTensor(old_vals)
             t_advs = torch.cuda.FloatTensor(advs)
 
         indexes = [i for i in range(len(data))]
@@ -169,6 +177,12 @@ class PPO(base.BaseAlgo):
 
         return self
 
+    def device_info(self):
+        if self._device.type == 'cuda':
+            return torch.cuda.get_device_name(device=self._device)
+        else:
+            return 'CPU'
+
     def _calculate_advantages(self, data):
         states, actions, nstates, rewards, dones, outs = zip(*data)
         old_log_probs, old_vals = zip(*outs)
@@ -182,7 +196,10 @@ class PPO(base.BaseAlgo):
         n_new_state_vals[:-1] = n_new_state_vals[1:]
 
         with torch.no_grad():
-            t_nstates = torch.FloatTensor(nstates[-1]).to(self._device)
+            if self._device == torch.device('cpu'):
+                t_nstates = torch.FloatTensor(nstates[-1])
+            else:
+                t_nstates = torch.cuda.FloatTensor(nstates[-1])
             n_new_state_vals[-1] = self._nnet(t_nstates)[1].detach().squeeze(-1).cpu().numpy()
             n_new_state_vals = n_new_state_vals.reshape(n_shape)
             n_state_vals = n_state_vals.reshape(n_shape)
@@ -193,29 +210,32 @@ class PPO(base.BaseAlgo):
         # Making GAE from td residual
         n_advs = list(self._gae(td_residual, n_dones))
 
-        l_new_state_vals = list(n_new_state_vals)
-
         if n_rewards.ndim == 1:
-            transitions = (states, actions, l_new_state_vals, rewards, dones, old_log_probs, old_vals, n_advs)
+            transitions = (numpy.array(states), numpy.array(actions), n_new_state_vals,
+                           n_rewards, n_dones, numpy.array(old_log_probs), numpy.array(old_vals),
+                           numpy.array(n_advs))
         else:
-            li_states = []
-            li_actions = []
-            li_new_state_vals = []
-            li_rewards = []
-            li_dones = []
-            li_old_log_probs = []
-            li_old_vals = []
-            li_n_advs = []
-            for i in range(len(states)):
-                li_states.extend(list(states[i]))
-                li_actions.extend(list(actions[i]))
-                li_new_state_vals.extend(list(l_new_state_vals[i]))
-                li_rewards.extend(list(rewards[i]))
-                li_dones.extend(list(dones[i]))
-                li_old_log_probs.extend(list(old_log_probs[i]))
-                li_old_vals.extend(list(old_vals[i]))
-                li_n_advs.extend(list(n_advs[i]))
-            transitions = (li_states, li_actions, li_new_state_vals, li_rewards, li_dones, li_old_log_probs, li_old_vals, li_n_advs)
+            li_states = numpy.array(states)
+            li_states = li_states.reshape((-1,) + li_states.shape[2:])
+
+            li_actions = numpy.array(actions)
+            li_actions = li_actions.reshape((-1,) + li_actions.shape[2:])
+
+            li_new_state_vals = n_new_state_vals.reshape((-1,) + n_new_state_vals.shape[2:])
+            li_rewards = n_rewards.reshape((-1,) + n_rewards.shape[2:])
+            li_dones = n_dones.reshape((-1,) + n_dones.shape[2:])
+
+            li_old_log_probs = numpy.array(old_log_probs)
+            li_old_log_probs = li_old_log_probs.reshape((-1,) + li_old_log_probs.shape[2:])
+
+            li_old_vals = numpy.array(old_vals)
+            li_old_vals = li_old_vals.reshape((-1,) + li_old_vals.shape[2:])
+
+            li_n_advs = numpy.array(n_advs)
+            li_n_advs = li_n_advs.reshape((-1,) + li_n_advs.shape[2:])
+
+            transitions = (li_states, li_actions, li_new_state_vals, li_rewards, li_dones, li_old_log_probs,
+                           li_old_vals, li_n_advs)
 
         return list(zip(*transitions))
 
@@ -231,7 +251,8 @@ class PPO(base.BaseAlgo):
 
         # Making critic losses
         t_state_vals_clipped = t_state_old_vals.view_as(t_state_vals) + \
-                               torch.clamp(t_state_vals - t_state_old_vals.view_as(t_state_vals), - self.cliprange, self.cliprange)
+                               torch.clamp(t_state_vals - t_state_old_vals.view_as(t_state_vals),
+                                           - self.cliprange, self.cliprange)
         t_critic_loss1 = self.lossfun(t_state_vals, t_target_state_vals)
 
         # Making critic final loss

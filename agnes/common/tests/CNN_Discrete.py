@@ -23,6 +23,6 @@ def test_single():
 
     envs, env, num_envs = wrap_vec_atari(env_name, envs_num=2)
 
-    runner = agnes.runners.Single(envs, agnes.algos.PPO, agnes.nns.CNN, workers_num=num_envs, all_cuda=False, cnfg=test_config())
+    runner = agnes.runners.Single(envs, agnes.algos.PPO, agnes.nns.CNN, workers_num=num_envs, cnfg=test_config())
     runner.log(agnes.TensorboardLogger(), agnes.log)
     runner.run()
