@@ -1,34 +1,43 @@
 from mpi4py import MPI
 
-import agnes.nns
-import agnes.algos
+import agnes
 from agnes.common import logger
 import time
 from torch import cuda
 from collections import deque
+import numpy
 
 
 class Distributed:
-    def __init__(self, env, algo: agnes.algos.base.BaseAlgo.__class__ = agnes.algos.PPO, nn=agnes.nns.MLP, cnfg=None):
+    logger = logger.ListLogger()
+
+    def __init__(self, env,
+                 algo: agnes.algos.base.BaseAlgo.__class__ = agnes.PPO,
+                 nn=agnes.MLP, config=None):
+        env, env_type, vec_num = env
         self.env = env
 
-        self.cnfg, self.env_type = algo.get_config(env)
-        if cnfg is not None:
-            self.cnfg = cnfg
+        self.cnfg, self.env_type = algo.get_config(env_type)
+        if config is not None:
+            self.cnfg = config
 
         # self.communication = Communications()
         self.communication = MPI.COMM_WORLD
 
         self.workers_num = (self.communication.Get_size() - 1)
+        self.vec_num = vec_num
 
         if self.communication.Get_rank() == 0:
             print(self.env_type)
-            self.trainer = algo(nn, env.observation_space, env.action_space, self.cnfg, workers=self.workers_num,
-                                trainer=True)
+            self.trainer = algo(nn, env.observation_space, env.action_space, self.cnfg,
+                                workers=self.workers_num*self.vec_num, trainer=True)
             if cuda.is_available():
                 self.trainer = self.trainer.to('cuda:0')
         else:
             self.worker = algo(nn, env.observation_space, env.action_space, self.cnfg, trainer=False)
+
+    def log(self, *args):
+        self.logger = logger.ListLogger(args)
 
     def run(self, log_interval=1):
         if self.communication.Get_rank() == 0:
@@ -40,9 +49,9 @@ class Distributed:
         return self.communication.Get_rank() == 0
 
     def _train(self, log_interval=1):
+        print(self.trainer.device_info(), 'will be used.')
         lr_things = []
         nupdates = 0
-        self.logger = logger.TensorboardLogger(".logs/"+str(time.time()))
         print("Stepping environment...")
 
         finish = False
@@ -52,7 +61,8 @@ class Distributed:
             data = self.communication.gather((), root=0)[1:]
 
             if data:
-                print("Done.")
+                if self.logger.is_active():
+                    print("Done.")
                 batch = []
                 info_arr = []
                 for item in data:
@@ -89,7 +99,8 @@ class Distributed:
 
                     lr_things = []
 
-                print("Stepping environment...")
+                if self.logger.is_active():
+                    print("Stepping environment...")
 
         MPI.Finalize()
 
@@ -99,45 +110,50 @@ class Distributed:
         timesteps = self.cnfg['timesteps']
 
         frames = 0
-        eplenmean = deque(maxlen=5)
-        rewardarr = deque(maxlen=5)
-        finish = False
+        eplenmean = [deque(maxlen=5)]*self.vec_num
+        rewardarr = [deque(maxlen=5)]*self.vec_num
+        rewardsum = numpy.zeros(self.vec_num)
+        beg = numpy.zeros(self.vec_num)
+        state = self.env.reset()
+
         while frames < timesteps:
-            state = self.env.reset()
-            frames_beg = frames
             frames += 1
-            rewardsum = 0
 
-            while True:
-                action, pred_action, out = self.worker(state)
+            action, pred_action, out = self.worker(state)
 
-                nstate, reward, done, _ = self.env.step(action)
-                rewardsum += reward
+            nstate, reward, done, _ = self.env.step(action)
+            rewardsum += numpy.array(reward)
 
-                transition = (state, pred_action, nstate, reward, done, out)
-                data = self.worker.experience(transition)
+            transition = (state, pred_action, nstate, reward, done, out)
+            data = self.worker.experience(transition)
 
-                if frames >= timesteps:
-                    finish = True
-                    break
-
-                if data:
-                    self.communication.gather(((eplenmean, rewardarr, frames), data), root=0)
-
-                    self.worker.load_state_dict(self.communication.bcast(None, root=0))
-
-                state = nstate
-                frames += 1
-
-                if done:
-                    eplenmean.append(frames - frames_beg)
-                    rewardarr.append(rewardsum)
-                    break
-            if finish:
+            if frames >= timesteps:
                 break
+
+            if data:
+                self.communication.gather(((eplenmean, rewardarr, frames), data), root=0)
+
+                self.worker.load_state_dict(self.communication.bcast(None, root=0))
+
+            state = nstate
+            frames += 1
+
+            for i in range(self.vec_num):
+                if done[i]:
+                    rewardarr[i].append(rewardsum[i])
+                    eplenmean[i].append(frames - beg[i])
+                    rewardsum[i] = 0
+                    beg[i] = frames
 
         if self.communication.Get_size() == self.workers_num + 1:
             print("Worker", self.communication.Get_rank(), "finished.")
             self.communication.gather(True, root=0)
 
         MPI.Finalize()
+
+    def __del__(self):
+        self.env.close()
+
+        del self.env
+        if self.logger.is_active():
+            del self.logger
