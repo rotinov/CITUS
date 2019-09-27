@@ -8,7 +8,7 @@ from agnes.common.envs_prep import wrap_deepmind, make_atari, SubprocVecEnv, Dum
 
 _game_envs = defaultdict(set)
 for env in gym.envs.registry.all():
-    env_type = env._entry_point.split(':')[0].split('.')[-1]
+    env_type = env.entry_point.split(':')[0].split('.')[-1]
     _game_envs[env_type].add(env.id)
 
 
@@ -47,7 +47,7 @@ def get_env_type(env: str):
 
     # Re-parse the gym registry, since we could have new envs since last time.
     for env in gym.envs.registry.all():
-        env_type = env._entry_point.split(':')[0].split('.')[-1]
+        env_type = env.entry_point.split(':')[0].split('.')[-1]
         _game_envs[env_type].add(env.id)  # This is a set so add is idempotent
 
     if env_id in _game_envs.keys():
