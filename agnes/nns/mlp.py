@@ -38,6 +38,10 @@ class MLPDiscrete(nn.Module):
 
         self.apply(get_weights_init('tanh'))
 
+    @staticmethod
+    def type_of_out():
+        return torch.int16
+
     def forward(self, x):
         compressed = False
         if x.ndimension() == 3:
@@ -89,6 +93,10 @@ class MLPContinuous(nn.Module):
         self.log_std = nn.Parameter(torch.ones(action_space.shape[0]) * logstd)
 
         self.apply(get_weights_init('tanh'))
+
+    @staticmethod
+    def type_of_out():
+        return torch.float32
 
     def forward(self, x):
         compressed = False

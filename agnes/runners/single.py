@@ -11,7 +11,7 @@ class Single:
     """
     def __init__(self, env,
                  algo: agnes.algos.base.BaseAlgo.__class__ = agnes.algos.PPO,
-                 nn=agnes.nns.MLP, env_type=None, cnfg=None, workers_num=1, all_cuda=False):
+                 nn=agnes.nns.MLP, env_type=None, cnfg=None, workers_num=1):
         self.env = env
         if env_type is None:
             env_type = env
@@ -32,6 +32,7 @@ class Single:
         self.logger = logger.ListLogger(args)
 
     def run(self, log_interval=1):
+        print(self.trainer.device_info(), 'will be used.')
         timesteps = self.cnfg['timesteps']
 
         frames = 0
