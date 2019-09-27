@@ -89,8 +89,10 @@ class PPO(base.BaseAlgo):
 
     def __call__(self, state):
         with torch.no_grad():
-            return self._nnet.get_action(torch.from_numpy(numpy.array(state, dtype=numpy.float32))
-                                         .to(self._device))
+            if self._device == torch.device('cpu'):
+                return self._nnet.get_action(torch.FloatTensor(state))
+            else:
+                return self._nnet.get_action(torch.cuda.FloatTensor(state))
 
     def experience(self, transition):
         self.buffer.append(transition)
@@ -112,6 +114,7 @@ class PPO(base.BaseAlgo):
         states, actions, new_state_old_vals, rewards, dones, old_log_probs, old_vals, advs = zip(*data)
 
         # Tensors
+<<<<<<< Updated upstream:algos/ppo.py
         t_states = torch.FloatTensor(states).to(self._device)
         t_actions = torch.from_numpy(numpy.array(actions, dtype=self._nnet.np_type)).to(self._device)
         t_new_state_old_vals = torch.FloatTensor(new_state_old_vals).to(self._device)
@@ -120,6 +123,32 @@ class PPO(base.BaseAlgo):
         t_old_log_probs = torch.from_numpy(numpy.array(old_log_probs, dtype=numpy.float32)).to(self._device)
         t_state_old_vals = torch.FloatTensor(old_vals).to(self._device)
         t_advs = torch.FloatTensor(advs).to(self._device)
+=======
+        if self._device == torch.device('cpu'):
+            t_states = torch.FloatTensor(states)
+            if self._nnet.type_of_out == torch.int16:
+                t_actions = torch.LongTensor(actions)
+            else:
+                t_actions = torch.FloatTensor(actions)
+            t_rewards = torch.FloatTensor(rewards)
+            t_new_state_old_vals = torch.FloatTensor(new_state_old_vals).reshape(t_rewards.shape)
+            t_dones = torch.FloatTensor(dones)
+            t_old_log_probs = torch.FloatTensor(old_log_probs)
+            t_state_old_vals = torch.FloatTensor(old_vals)
+            t_advs = torch.FloatTensor(advs)
+        else:
+            t_states = torch.cuda.FloatTensor(states)
+            if self._nnet.type_of_out == torch.int16:
+                t_actions = torch.cuda.LongTensor(actions)
+            else:
+                t_actions = torch.cuda.FloatTensor(actions)
+            t_rewards = torch.cuda.FloatTensor(rewards)
+            t_new_state_old_vals = torch.cuda.FloatTensor(new_state_old_vals).reshape(t_rewards.shape)
+            t_dones = torch.cuda.FloatTensor(dones)
+            t_old_log_probs = torch.cuda.FloatTensor(old_log_probs)
+            t_state_old_vals = torch.cuda.FloatTensor(old_vals)
+            t_advs = torch.cuda.FloatTensor(advs)
+>>>>>>> Stashed changes:agnes/algos/ppo.py
 
         indexes = [i for i in range(len(data))]
 
@@ -159,6 +188,12 @@ class PPO(base.BaseAlgo):
 
         return self
 
+    def device_info(self):
+        if self._device.type == 'cuda':
+            return torch.cuda.get_device_name(device=self._device)
+        else:
+            return 'CPU'
+
     def _calculate_advantages(self, data):
         states, actions, nstates, rewards, dones, outs = zip(*data)
         old_log_probs, old_vals = zip(*outs)
@@ -171,7 +206,10 @@ class PPO(base.BaseAlgo):
         n_new_state_vals[:-1] = n_new_state_vals[1:]
 
         with torch.no_grad():
-            t_nstates = torch.FloatTensor(nstates[-1]).to(self._device)
+            if self._device == torch.device('cpu'):
+                t_nstates = torch.FloatTensor(nstates[-1])
+            else:
+                t_nstates = torch.cuda.FloatTensor(nstates[-1])
             n_new_state_vals[-1] = self._nnet(t_nstates)[1].detach().squeeze(-1).cpu().numpy()
 
         # Making td residual
@@ -180,9 +218,38 @@ class PPO(base.BaseAlgo):
         # Making GAE from td residual
         n_advs = list(self._gae(td_residual, n_dones))
 
+<<<<<<< Updated upstream:algos/ppo.py
         l_new_state_vals = list(n_new_state_vals)
 
         transitions = (states, actions, l_new_state_vals, rewards, dones, old_log_probs, old_vals, n_advs)
+=======
+        if n_rewards.ndim == 1:
+            transitions = (numpy.array(states), numpy.array(actions), n_new_state_vals,
+                           n_rewards, n_dones, numpy.array(old_log_probs), numpy.array(old_vals),
+                           numpy.array(n_advs))
+        else:
+            li_states = numpy.array(states)
+            li_states = li_states.reshape((-1,) + li_states.shape[2:])
+
+            li_actions = numpy.array(actions)
+            li_actions = li_actions.reshape((-1,) + li_actions.shape[2:])
+
+            li_new_state_vals = n_new_state_vals.reshape((-1,) + n_new_state_vals.shape[2:])
+            li_rewards = n_rewards.reshape((-1,) + n_rewards.shape[2:])
+            li_dones = n_dones.reshape((-1,) + n_dones.shape[2:])
+
+            li_old_log_probs = numpy.array(old_log_probs)
+            li_old_log_probs = li_old_log_probs.reshape((-1,) + li_old_log_probs.shape[2:])
+
+            li_old_vals = numpy.array(old_vals)
+            li_old_vals = li_old_vals.reshape((-1,) + li_old_vals.shape[2:])
+
+            li_n_advs = numpy.array(n_advs)
+            li_n_advs = li_n_advs.reshape((-1,) + li_n_advs.shape[2:])
+
+            transitions = (li_states, li_actions, li_new_state_vals, li_rewards, li_dones, li_old_log_probs,
+                           li_old_vals, li_n_advs)
+>>>>>>> Stashed changes:agnes/algos/ppo.py
 
         return list(zip(*transitions))
 
@@ -197,8 +264,14 @@ class PPO(base.BaseAlgo):
         t_target_state_vals = t_rewards + self.gamma * (1. - t_dones) * t_new_state_old_vals
 
         # Making critic losses
+<<<<<<< Updated upstream:algos/ppo.py
         t_state_vals_clipped = t_state_old_vals + torch.clamp(t_state_vals - t_state_old_vals, - self.cliprange,
                                                               self.cliprange)
+=======
+        t_state_vals_clipped = t_state_old_vals.view_as(t_state_vals) + \
+                               torch.clamp(t_state_vals - t_state_old_vals.view_as(t_state_vals),
+                                           - self.cliprange, self.cliprange)
+>>>>>>> Stashed changes:agnes/algos/ppo.py
         t_critic_loss1 = self.lossfun(t_state_vals, t_target_state_vals)
 
         # Making critic final loss
