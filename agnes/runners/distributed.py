@@ -37,7 +37,8 @@ class Distributed:
             self.worker = algo(nn, env.observation_space, env.action_space, self.cnfg, trainer=False)
 
     def log(self, *args):
-        self.logger = logger.ListLogger(args)
+        if self.is_trainer():
+            self.logger = logger.ListLogger(args)
 
     def run(self, log_interval=1):
         if self.communication.Get_rank() == 0:

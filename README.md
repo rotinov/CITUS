@@ -7,23 +7,44 @@
 ## Runners
 * Single
 
+One worker that is also a trainer. 'agnes.make_vec_env' can be used here.
+
 ```python
 import agnes
+import time
 
 
-env = agnes.make_env("InvertedDoublePendulum-v2")
-runner = agnes.Single(env, agnes.PPO, agnes.MLP)
+if __name__ == '__main__':
+    env = agnes.make_env("InvertedDoublePendulum-v2")
+    runner = agnes.Single(env, agnes.PPO, agnes.MLP)
+    runner.log(agnes.log, agnes.TensorboardLogger(".logs/"+str(time.time())))
+    runner.run()
 
 ```
 
+'agnes.log' - object of StandardLogger class that outputs parameters to console.
+'agnes.TensorboardLogger' - class for writing logs in Tensorboard file.
+
+
 * Distributed
 
-```python
+Runs with
 
+```bash
+mpiexec -n 3 python -m mpi4py script_name.py
+or
+mpirun -n 3 python -m mpi4py script_name.py
+```
+This command will run 2 workers and 1 trainer.
+```python
+# script_name.py
 import agnes
 
 
-runner = agnes.Distributed(env, agnes.PPO, agnes.MLP)
+if __name__ == '__main__':
+    env = agnes.make_vec_env("BreakoutNoFrameskip-v4")
+    runner = agnes.Distributed(env, agnes.PPO, agnes.CNN)
+    runner.run()
 
 ```
 
@@ -34,26 +55,28 @@ Proximal Policy Optimization is implemented in this framework and can be used si
 import agnes
 
 
-runner = agnes.Single(env, agnes.PPO, agnes.MLP)
+if __name__ == '__main__':
+    runner = agnes.Single(env, agnes.PPO, agnes.MLP)
+    runner.run()
 
 ```
 
 ## Neural Network Architectures
 
 * Multi Layer Perceptron
+
+Can be used with both Continuous and Discrete action spaces.
 ```python
-import agnes
-
-
+...
 runner = agnes.Single(env, agnes.PPO, agnes.MLP)
-
+...
 ```
 
 * Convolutional Neural Network
+
+Can be used only with Discrete action spaces.
 ```python
-import agnes
-
-
+...
 runner = agnes.Single(env, agnes.PPO, agnes.CNN)
-
+...
 ```
