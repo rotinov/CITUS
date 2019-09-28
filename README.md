@@ -9,10 +9,9 @@
 
 ```python
 import agnes
-import gym
 
 
-env = gym.make("InvertedDoublePendulum-v2")
+env = agnes.make_env("InvertedDoublePendulum-v2")
 runner = agnes.Single(env, agnes.PPO, agnes.MLP)
 
 ```
