@@ -3,7 +3,7 @@ import numpy
 import random
 import gym
 from agnes.algos import base
-from agnes.common import schedules
+from agnes.common import schedules, logger
 from pprint import pprint
 from agnes.algos.configs.ppo_config import get_config
 
@@ -201,6 +201,7 @@ class PPO(base.BaseAlgo):
             else:
                 t_nstates = torch.cuda.FloatTensor(nstates[-1])
             n_new_state_vals[-1] = self._nnet(t_nstates)[1].detach().squeeze(-1).cpu().numpy()
+
             n_new_state_vals = n_new_state_vals.reshape(n_shape)
             n_state_vals = n_state_vals.reshape(n_shape)
 
@@ -208,12 +209,11 @@ class PPO(base.BaseAlgo):
         td_residual = - n_state_vals.reshape(n_shape) + n_rewards + self.gamma * (1. - n_dones) * n_new_state_vals
 
         # Making GAE from td residual
-        n_advs = list(self._gae(td_residual, n_dones))
+        n_advs = self._gae(td_residual, n_dones)
 
         if n_rewards.ndim == 1:
             transitions = (numpy.array(states), numpy.array(actions), n_new_state_vals,
-                           n_rewards, n_dones, numpy.array(old_log_probs), numpy.array(old_vals),
-                           numpy.array(n_advs))
+                           n_rewards, n_dones, numpy.array(old_log_probs), numpy.array(old_vals), n_advs)
         else:
             li_states = numpy.array(states)
             li_states = li_states.reshape((-1,) + li_states.shape[2:])
@@ -224,14 +224,12 @@ class PPO(base.BaseAlgo):
             li_new_state_vals = n_new_state_vals.reshape((-1,) + n_new_state_vals.shape[2:])
             li_rewards = n_rewards.reshape((-1,) + n_rewards.shape[2:])
             li_dones = n_dones.reshape((-1,) + n_dones.shape[2:])
+            li_old_vals = n_state_vals.reshape((-1,) + n_state_vals.shape[2:])
 
             li_old_log_probs = numpy.array(old_log_probs)
             li_old_log_probs = li_old_log_probs.reshape((-1,) + li_old_log_probs.shape[2:])
 
-            li_old_vals = numpy.array(old_vals)
-            li_old_vals = li_old_vals.reshape((-1,) + li_old_vals.shape[2:])
-
-            li_n_advs = numpy.array(n_advs)
+            li_n_advs = n_advs
             li_n_advs = li_n_advs.reshape((-1,) + li_n_advs.shape[2:])
 
             transitions = (li_states, li_actions, li_new_state_vals, li_rewards, li_dones, li_old_log_probs,
@@ -246,22 +244,22 @@ class PPO(base.BaseAlgo):
         t_distrib, t_state_vals_un = self._nnet(t_states)
         t_state_vals = t_state_vals_un.squeeze(-1)
 
-        # Making target for value update and for td residual
-        t_target_state_vals = t_rewards + self.gamma * (1. - t_dones) * t_new_state_old_vals
-
-        # Making critic losses
-        t_state_vals_clipped = t_state_old_vals.view_as(t_state_vals) + \
-                               torch.clamp(t_state_vals - t_state_old_vals.view_as(t_state_vals),
-                                           - self.cliprange, self.cliprange)
-        t_critic_loss1 = self.lossfun(t_state_vals, t_target_state_vals)
-
-        # Making critic final loss
-        t_critic_loss2 = self.lossfun(t_state_vals_clipped, t_target_state_vals)
-        t_critic_loss = .5 * torch.max(t_critic_loss1, t_critic_loss2).mean()
+        t_state_old_vals = t_state_old_vals.view_as(t_state_vals)
 
         # Normalizing advantages
-        # t_advantages = t_advs
         t_advantages = ((t_advs - t_advs.mean()) / (t_advs.std() + 1e-8)).unsqueeze(-1)
+
+        # Making target for value update and for td residual
+        # t_target_state_vals = t_rewards + self.gamma * (1. - t_dones) * t_new_state_old_vals
+        t_target_state_vals = t_advantages.squeeze(-1) + t_state_old_vals
+
+        # Making critic losses
+        t_state_vals_clipped = t_state_old_vals + torch.clamp(t_state_vals - t_state_old_vals, - self.cliprange, self.cliprange)
+
+        # Making critic final loss
+        t_critic_loss1 = self.lossfun(t_state_vals, t_target_state_vals)
+        t_critic_loss2 = self.lossfun(t_state_vals_clipped, t_target_state_vals)
+        t_critic_loss = .5 * torch.max(t_critic_loss1, t_critic_loss2).mean()
 
         # Getting log probs
         t_new_log_probs = t_distrib.log_prob(t_actions)
@@ -298,7 +296,8 @@ class PPO(base.BaseAlgo):
         self.lr_scheduler.step()
 
         return t_actor_loss.item(), t_critic_loss.item(), t_entropy.item(), approxkl, clipfrac, \
-               t_distrib.variance.mean().item(), (self.lr_scheduler.get_lr()[0], self.lr_scheduler.get_count())
+               logger.explained_variance(t_state_vals.detach().cpu().numpy(), t_target_state_vals.detach().cpu().numpy()), \
+               (self.lr_scheduler.get_lr()[0], self.lr_scheduler.get_count())
 
     def _gae(self, td_residual, dones):
         for i in reversed(range(td_residual.shape[0] - 1)):

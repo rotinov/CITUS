@@ -7,6 +7,20 @@ def safemean(xs):
     return numpy.nan if len(xs) == 0 else numpy.mean(xs)
 
 
+def explained_variance(ypred, y):
+    """
+    Computes fraction of variance that ypred explains about y.
+    Returns 1 - Var[y-ypred] / Var[y]
+    interpretation:
+        ev=0  =>  might as well have predicted zero
+        ev=1  =>  perfect prediction
+        ev<0  =>  worse than just predicting zero
+    """
+    assert y.ndim == 1 and ypred.ndim == 1
+    vary = numpy.var(y)
+    return numpy.nan if vary == 0 else 1 - numpy.var(y-ypred) / vary
+
+
 class StandardLogger:
     def __init__(self):
         self.b_time = time.time()
@@ -42,13 +56,19 @@ log = StandardLogger()
 
 
 class TensorboardLogger:
+    first = True
+
     def __init__(self, path=".logs/"+str(time.time())):
-        self.writer = SummaryWriter(log_dir=path)
         self.b_time = time.time()
+        self.path = path
 
     def __call__(self, eplenmean, rewardarr, entropy, actor_loss, critic_loss,
                  nupdates, frames, approxkl, clipfrac, variance, debug):
         time_now = time.time()
+
+        if self.first:
+            self.writer = SummaryWriter(log_dir=self.path)
+            self.first = False
 
         self.writer.add_scalar("eplenmean", safemean(eplenmean), nupdates)
         self.writer.add_scalar("eprewmean", safemean(rewardarr), nupdates)
@@ -73,7 +93,8 @@ class TensorboardLogger:
         self.writer.flush()
 
     def __del__(self):
-        self.writer.close()
+        if not self.first:
+            self.writer.close()
 
 
 class ListLogger:
