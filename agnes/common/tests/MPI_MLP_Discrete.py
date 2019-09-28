@@ -18,7 +18,7 @@ def test_config():
 
 
 if __name__ == '__main__':
-    env = agnes.make_env('CartPole-v0')
+    env = agnes.make_vec_env('CartPole-v0', envs_num=2)
 
     runner = agnes.Distributed(env, agnes.PPO, agnes.MLP, config=test_config())
     runner.log(agnes.log)
