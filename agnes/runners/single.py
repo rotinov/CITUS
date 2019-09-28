@@ -9,24 +9,25 @@ class Single:
     """"Single" runner releases learning with a single worker that is also a trainer.
     "Single" runner is compatible with vector environments(config or env_type should be specified manually).
     """
+    logger = logger.ListLogger()
+
     def __init__(self, env,
                  algo: agnes.algos.base.BaseAlgo.__class__ = agnes.algos.PPO,
-                 nn=agnes.nns.MLP, env_type=None, cnfg=None, workers_num=1):
+                 nn=agnes.nns.MLP, config=None):
+        env, env_type, vec_num = env
         self.env = env
-        if env_type is None:
-            env_type = env
+
         self.cnfg, self.env_type = algo.get_config(env_type)
+        if config is not None:
+            self.cnfg = config
 
-        if cnfg is not None:
-            self.cnfg = cnfg
-        print(self.env_type)
-        self.workers_num = workers_num
+        self.vec_num = vec_num
 
-        self.trainer = algo(nn, env.observation_space, env.action_space, self.cnfg, workers=workers_num)
+        print('Env type: ', self.env_type, 'Envs num:', vec_num)
+
+        self.trainer = algo(nn, env.observation_space, env.action_space, self.cnfg, workers=vec_num)
         if cuda.is_available():
             self.trainer = self.trainer.to('cuda:0')
-
-        self.logger = logger.ListLogger()
 
     def log(self, *args):
         self.logger = logger.ListLogger(args)
@@ -37,15 +38,15 @@ class Single:
 
         frames = 0
         nupdates = 0
-        eplenmean = [deque(maxlen=5*log_interval)]*self.workers_num
-        rewardarr = [deque(maxlen=5*log_interval)]*self.workers_num
+        eplenmean = [deque(maxlen=5*log_interval)]*self.vec_num
+        rewardarr = [deque(maxlen=5*log_interval)]*self.vec_num
         lr_things = []
         print("Stepping environment...")
 
         state = self.env.reset()
 
-        rewardsum = numpy.zeros(self.workers_num)
-        beg = numpy.zeros(self.workers_num)
+        rewardsum = numpy.zeros(self.vec_num)
+        beg = numpy.zeros(self.vec_num)
 
         while frames < timesteps:
 
@@ -77,14 +78,12 @@ class Single:
             state = nstate
             frames += 1
 
-            for i in range(self.workers_num):
-                if (isinstance(done, bool) and done) or (not isinstance(done, bool) and done[i]):
+            for i in range(self.vec_num):
+                if done[i]:
                     rewardarr[i].append(rewardsum[i])
                     eplenmean[i].append(frames - beg[i])
                     rewardsum[i] = 0
                     beg[i] = frames
-                    if isinstance(done, bool):
-                        self.env.reset()
 
         print("Done.")
 
@@ -96,6 +95,10 @@ class Single:
                         actor_loss, critic_loss, nupdates,
                         frames, approxkl, clipfrac, variance, zip(*debug))
 
+    def __del__(self):
+        self.env.close()
+
         del self.env
-        del self.logger
+        if self.logger.is_active():
+            del self.logger
         del self.trainer

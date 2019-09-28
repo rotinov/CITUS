@@ -1,5 +1,4 @@
 import agnes
-from agnes.common.envs_prep import *
 
 
 def test_config():
@@ -21,8 +20,8 @@ def test_config():
 def test_single():
     env_name = "PongNoFrameskip-v4"
 
-    envs, env, num_envs = wrap_vec_atari(env_name, envs_num=2)
+    envs = agnes.make_env(env_name)
 
-    runner = agnes.runners.Single(envs, agnes.algos.PPO, agnes.nns.CNN, workers_num=num_envs, cnfg=test_config())
+    runner = agnes.runners.Single(envs, agnes.PPO, agnes.CNN, config=test_config())
     runner.log(agnes.TensorboardLogger(), agnes.log)
     runner.run()
