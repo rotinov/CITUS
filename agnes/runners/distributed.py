@@ -111,8 +111,8 @@ class Distributed:
         timesteps = self.cnfg['timesteps']
 
         frames = 0
-        eplenmean = [deque(maxlen=5)]*self.vec_num
-        rewardarr = [deque(maxlen=5)]*self.vec_num
+        eplenmean = [[]] * self.vec_num
+        rewardarr = [[]] * self.vec_num
         rewardsum = numpy.zeros(self.vec_num)
         beg = numpy.zeros(self.vec_num)
         state = self.env.reset()
@@ -135,6 +135,8 @@ class Distributed:
                 self.communication.gather(((eplenmean, rewardarr, frames), data), root=0)
 
                 self.worker.load_state_dict(self.communication.bcast(None, root=0))
+                eplenmean = [[]] * self.vec_num
+                rewardarr = [[]] * self.vec_num
 
             state = nstate
             frames += 1

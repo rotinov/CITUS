@@ -94,6 +94,7 @@ class TensorboardLogger:
 
     def __del__(self):
         if not self.first:
+            self.writer.flush()
             self.writer.close()
 
 
