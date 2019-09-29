@@ -8,6 +8,10 @@ from pprint import pprint
 from agnes.algos.configs.ppo_config import get_config
 
 
+torch.backends.cudnn.deterministic = False
+torch.backends.cudnn.benchmark = True
+
+
 class Buffer(base.BaseBuffer):
     def __init__(self):
         self.rollouts = []
@@ -180,12 +184,12 @@ class PPO(base.BaseAlgo):
         states, actions, nstates, rewards, dones, outs = zip(*data)
         old_log_probs, old_vals = zip(*outs)
 
-        n_rewards = numpy.array(rewards)
-        n_dones = numpy.array(dones)
+        n_rewards = numpy.asarray(rewards)
+        n_dones = numpy.asarray(dones)
         n_shape = n_dones.shape
 
-        n_state_vals = numpy.array(old_vals)
-        n_new_state_vals = numpy.array(old_vals)
+        n_state_vals = numpy.asarray(old_vals)
+        n_new_state_vals = numpy.asarray(old_vals)
         n_new_state_vals[:-1] = n_new_state_vals[1:]
 
         with torch.no_grad():
@@ -211,17 +215,17 @@ class PPO(base.BaseAlgo):
         n_returns = n_advs + n_state_vals
 
         if n_rewards.ndim == 1:
-            transitions = (numpy.array(states), numpy.array(actions),
-                           numpy.array(old_log_probs), numpy.array(old_vals), n_returns)
+            transitions = (numpy.asarray(states), numpy.asarray(actions),
+                           numpy.asarray(old_log_probs), numpy.asarray(old_vals), n_returns)
         else:
-            li_states = numpy.array(states)
+            li_states = numpy.asarray(states)
             li_states = li_states.reshape((-1,) + li_states.shape[2:])
 
-            li_actions = numpy.array(actions)
+            li_actions = numpy.asarray(actions)
             li_actions = li_actions.reshape((-1,) + li_actions.shape[2:])
             li_old_vals = n_state_vals.reshape((-1,) + n_state_vals.shape[2:])
 
-            li_old_log_probs = numpy.array(old_log_probs)
+            li_old_log_probs = numpy.asarray(old_log_probs)
             li_old_log_probs = li_old_log_probs.reshape((-1,) + li_old_log_probs.shape[2:])
 
             li_n_returns = n_returns

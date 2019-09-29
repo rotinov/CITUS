@@ -26,7 +26,10 @@ class Single:
 
         self.trainer = algo(nn, env.observation_space, env.action_space, self.cnfg, workers=vec_num)
         if cuda.is_available():
-            self.trainer = self.trainer.to('cuda:0')
+            try:
+                self.trainer = self.trainer.to('cuda:0')
+            except RuntimeError:
+                self.trainer = self.trainer.to('cpu')
 
         self.logger = logger.ListLogger()
 
@@ -39,8 +42,8 @@ class Single:
 
         frames = 0
         nupdates = 0
-        eplenmean = [deque(maxlen=5*log_interval)]*self.vec_num
-        rewardarr = [deque(maxlen=5*log_interval)]*self.vec_num
+        eplenmean = [[]]*self.vec_num
+        rewardarr = [[]]*self.vec_num
         lr_things = []
         print("Stepping environment...")
 
@@ -54,7 +57,7 @@ class Single:
             action, pred_action, out = self.trainer(state)
 
             nstate, reward, done, _ = self.env.step(action)
-            rewardsum += numpy.array(reward)
+            rewardsum += numpy.asarray(reward)
 
             transition = (state, pred_action, nstate, reward, done, out)
             data = self.trainer.experience(transition)
@@ -68,10 +71,12 @@ class Single:
 
                 if nupdates % log_interval == 0 and lr_things:
                     actor_loss, critic_loss, entropy, approxkl, clipfrac, variance, debug = zip(*lr_things)
-                    self.logger(numpy.array(eplenmean).reshape(-1), numpy.array(rewardarr).reshape(-1), entropy,
+                    self.logger(numpy.asarray(eplenmean).reshape(-1), numpy.asarray(rewardarr).reshape(-1), entropy,
                                 actor_loss, critic_loss, nupdates,
                                 frames, approxkl, clipfrac, variance, zip(*debug))
                     lr_things = []
+                    eplenmean = [[]] * self.vec_num
+                    rewardarr = [[]] * self.vec_num
 
                 if self.logger.is_active():
                     print("Stepping environment...")
@@ -92,7 +97,7 @@ class Single:
 
         if lr_things:
             actor_loss, critic_loss, entropy, approxkl, clipfrac, variance, debug = zip(*lr_things)
-            self.logger(numpy.array(eplenmean).reshape(-1), numpy.array(rewardarr).reshape(-1), entropy,
+            self.logger(numpy.asarray(eplenmean).reshape(-1), numpy.asarray(rewardarr).reshape(-1), entropy,
                         actor_loss, critic_loss, nupdates,
                         frames, approxkl, clipfrac, variance, zip(*debug))
 
@@ -100,5 +105,4 @@ class Single:
         self.env.close()
 
         del self.env
-        del self.logger
         del self.trainer

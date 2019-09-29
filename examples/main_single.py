@@ -4,7 +4,7 @@ import time
 
 env_name1 = "BreakoutNoFrameskip-v4"
 env_name2 = "Ant-v2"
-env_name3 = "InvertedDoublePendulum-v2"
+env_name3 = "Swimmer-v2"
 
 
 if __name__ == '__main__':
