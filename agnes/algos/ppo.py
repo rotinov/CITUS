@@ -211,7 +211,6 @@ class PPO(base.BaseAlgo):
         for i in reversed(range(n_advs.shape[0])):
             n_advs[i] = gaelam = n_advs[i] + self.lam * self.GAMMA * (1. - n_dones[i]) * gaelam
 
-        # n_advs = self._gae(td_residual, n_dones)
         n_returns = n_advs + n_state_vals
 
         if n_rewards.ndim == 1:
@@ -244,24 +243,24 @@ class PPO(base.BaseAlgo):
 
         STATEVALSNEW = t_state_vals.detach()
         OLDVALS = OLDVALS.view_as(t_state_vals)
-        ADVS = RETURNS - STATEVALSNEW
+        ADVANTAGES = RETURNS - OLDVALS
 
         # Normalizing advantages
-        ADVS = ((ADVS - ADVS.mean()) / (ADVS.std() + 1e-8)).unsqueeze(-1)
-        TARGETVAL = ADVS.squeeze(-1) + STATEVALSNEW
+        ADVS = ((ADVANTAGES - ADVANTAGES.mean()) / (ADVANTAGES.std() + 1e-8)).unsqueeze(-1)
+        TARGETVAL = RETURNS
 
         # Making critic losses
         t_state_vals_clipped = OLDVALS + torch.clamp(t_state_vals - OLDVALS, - self.CLIPRANGE, self.CLIPRANGE)
 
         # print('Value:', STATEVALSNEW.mean())
-        # print('Target:', RETURNS.mean())
-        # print('Unsquared loss1:', (STATEVALSNEW - RETURNS).mean())
-        # print('Unsquared loss2:', (t_state_vals_clipped.detach() - RETURNS).mean())
+        # print('Target:', TARGETVAL.mean())
+        # print('Unsquared loss1:', (STATEVALSNEW - TARGETVAL).mean())
+        # print('Unsquared loss2:', (t_state_vals_clipped.detach() - TARGETVAL).mean())
         # print('-'*15)
 
         # Making critic final loss
-        t_critic_loss1 = self.lossfun(t_state_vals, TARGETVAL)
-        t_critic_loss2 = self.lossfun(t_state_vals_clipped, TARGETVAL)
+        t_critic_loss1 = (t_state_vals - TARGETVAL) ** 2
+        t_critic_loss2 = (t_state_vals_clipped - TARGETVAL) ** 2
         t_critic_loss = .5 * torch.max(t_critic_loss1, t_critic_loss2).mean()
 
         # Getting log probs
