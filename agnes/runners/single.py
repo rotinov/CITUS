@@ -9,7 +9,6 @@ class Single:
     """"Single" runner releases learning with a single worker that is also a trainer.
     "Single" runner is compatible with vector environments(config or env_type should be specified manually).
     """
-    logger = logger.ListLogger()
 
     def __init__(self, env,
                  algo: agnes.algos.base.BaseAlgo.__class__ = agnes.algos.PPO,
@@ -28,6 +27,8 @@ class Single:
         self.trainer = algo(nn, env.observation_space, env.action_space, self.cnfg, workers=vec_num)
         if cuda.is_available():
             self.trainer = self.trainer.to('cuda:0')
+
+        self.logger = logger.ListLogger()
 
     def log(self, *args):
         self.logger = logger.ListLogger(args)
@@ -99,6 +100,5 @@ class Single:
         self.env.close()
 
         del self.env
-        if self.logger.is_active():
-            del self.logger
+        del self.logger
         del self.trainer

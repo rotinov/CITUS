@@ -56,9 +56,9 @@ class PPO(base.BaseAlgo):
         else:
             self._nnet.eval()
 
-        self.gamma = cnfg['gamma']
+        self.GAMMA = cnfg['gamma']
         self.learning_rate = cnfg['learning_rate']
-        self.cliprange = cnfg['cliprange']
+        self.CLIPRANGE = cnfg['cliprange']
         self.vf_coef = cnfg['vf_coef']
         self.ent_coef = cnfg['ent_coef']
         self.final_timestep = cnfg['timesteps']
@@ -66,7 +66,7 @@ class PPO(base.BaseAlgo):
         self.nminibatches = cnfg['nminibatches']
         self.lam = cnfg['lam']
         self.noptepochs = cnfg['noptepochs']
-        self.max_grad_norm = cnfg['max_grad_norm']
+        self.MAX_GRAD_NORM = cnfg['max_grad_norm']
         self.workers_num = workers
 
         self.nbatch = self.workers_num * self.nsteps
@@ -110,7 +110,7 @@ class PPO(base.BaseAlgo):
         info = []
 
         # Unpack
-        states, actions, new_state_old_vals, rewards, dones, old_log_probs, old_vals, advs = zip(*data)
+        states, actions, old_log_probs, old_vals, advs = zip(*data)
 
         # Tensors
         if self._device == torch.device('cpu'):
@@ -119,9 +119,6 @@ class PPO(base.BaseAlgo):
                 t_actions = torch.LongTensor(actions)
             else:
                 t_actions = torch.FloatTensor(actions)
-            t_rewards = torch.FloatTensor(rewards)
-            t_new_state_old_vals = torch.FloatTensor(new_state_old_vals).reshape(t_rewards.shape)
-            t_dones = torch.FloatTensor(dones)
             t_old_log_probs = torch.FloatTensor(old_log_probs)
             t_state_old_vals = torch.FloatTensor(old_vals)
             t_advs = torch.FloatTensor(advs)
@@ -131,9 +128,6 @@ class PPO(base.BaseAlgo):
                 t_actions = torch.cuda.LongTensor(actions)
             else:
                 t_actions = torch.cuda.FloatTensor(actions)
-            t_rewards = torch.cuda.FloatTensor(rewards)
-            t_new_state_old_vals = torch.cuda.FloatTensor(new_state_old_vals).reshape(t_rewards.shape)
-            t_dones = torch.cuda.FloatTensor(dones)
             t_old_log_probs = torch.cuda.FloatTensor(old_log_probs)
             t_state_old_vals = torch.cuda.FloatTensor(old_vals)
             t_advs = torch.cuda.FloatTensor(advs)
@@ -144,10 +138,9 @@ class PPO(base.BaseAlgo):
             random.shuffle(indexes)
             ind_batches = self.buffer.learn(indexes, self.nbatch_train)
             for ind_minibatch in ind_batches:
-                minibatch = (t_states[ind_minibatch], t_actions[ind_minibatch], t_new_state_old_vals[ind_minibatch],
-                             t_rewards[ind_minibatch], t_dones[ind_minibatch], t_old_log_probs[ind_minibatch],
+                minibatch = (t_states[ind_minibatch], t_actions[ind_minibatch], t_old_log_probs[ind_minibatch],
                              t_state_old_vals[ind_minibatch], t_advs[ind_minibatch])
-                info.append(self._one_train(minibatch))
+                info.append(self._one_train(minibatch))  # STATES, ACTIONS, OLDLOGPROBS, OLDVALS, RETURNS
 
         return info
 
@@ -206,73 +199,79 @@ class PPO(base.BaseAlgo):
             n_state_vals = n_state_vals.reshape(n_shape)
 
         # Making td residual
-        td_residual = - n_state_vals.reshape(n_shape) + n_rewards + self.gamma * (1. - n_dones) * n_new_state_vals
+        td_residual = - n_state_vals.reshape(n_shape) + n_rewards + self.GAMMA * (1. - n_dones) * n_new_state_vals
 
         # Making GAE from td residual
-        n_advs = self._gae(td_residual, n_dones)
+        n_advs = td_residual
+        gaelam = 0
+        for i in reversed(range(n_advs.shape[0])):
+            n_advs[i] = gaelam = n_advs[i] + self.lam * self.GAMMA * (1. - n_dones[i]) * gaelam
+
+        # n_advs = self._gae(td_residual, n_dones)
+        n_returns = n_advs + n_state_vals
 
         if n_rewards.ndim == 1:
-            transitions = (numpy.array(states), numpy.array(actions), n_new_state_vals,
-                           n_rewards, n_dones, numpy.array(old_log_probs), numpy.array(old_vals), n_advs)
+            transitions = (numpy.array(states), numpy.array(actions),
+                           numpy.array(old_log_probs), numpy.array(old_vals), n_returns)
         else:
             li_states = numpy.array(states)
             li_states = li_states.reshape((-1,) + li_states.shape[2:])
 
             li_actions = numpy.array(actions)
             li_actions = li_actions.reshape((-1,) + li_actions.shape[2:])
-
-            li_new_state_vals = n_new_state_vals.reshape((-1,) + n_new_state_vals.shape[2:])
-            li_rewards = n_rewards.reshape((-1,) + n_rewards.shape[2:])
-            li_dones = n_dones.reshape((-1,) + n_dones.shape[2:])
             li_old_vals = n_state_vals.reshape((-1,) + n_state_vals.shape[2:])
 
             li_old_log_probs = numpy.array(old_log_probs)
             li_old_log_probs = li_old_log_probs.reshape((-1,) + li_old_log_probs.shape[2:])
 
-            li_n_advs = n_advs
-            li_n_advs = li_n_advs.reshape((-1,) + li_n_advs.shape[2:])
+            li_n_returns = n_returns
+            li_n_returns = li_n_returns.reshape((-1,) + li_n_returns.shape[2:])
 
-            transitions = (li_states, li_actions, li_new_state_vals, li_rewards, li_dones, li_old_log_probs,
-                           li_old_vals, li_n_advs)
+            transitions = (li_states, li_actions, li_old_log_probs, li_old_vals, li_n_returns)
 
         return list(zip(*transitions))
 
-    def _one_train(self, data):
-        t_states, t_actions, t_new_state_old_vals, t_rewards, t_dones, t_old_log_probs, t_state_old_vals, t_advs = data
+    def _one_train(self, DATA):
+        STATES, ACTIONS, OLDLOGPROBS, OLDVALS, RETURNS = DATA
 
         # Feedforward with building computation graph
-        t_distrib, t_state_vals_un = self._nnet(t_states)
+        t_distrib, t_state_vals_un = self._nnet(STATES)
         t_state_vals = t_state_vals_un.squeeze(-1)
 
-        t_state_old_vals = t_state_old_vals.view_as(t_state_vals)
+        STATEVALSNEW = t_state_vals.detach()
+        OLDVALS = OLDVALS.view_as(t_state_vals)
+        ADVS = RETURNS - STATEVALSNEW
 
         # Normalizing advantages
-        t_advantages = ((t_advs - t_advs.mean()) / (t_advs.std() + 1e-8)).unsqueeze(-1)
-
-        # Making target for value update and for td residual
-        # t_target_state_vals = t_rewards + self.gamma * (1. - t_dones) * t_new_state_old_vals
-        t_target_state_vals = t_advantages.squeeze(-1) + t_state_old_vals
+        ADVS = ((ADVS - ADVS.mean()) / (ADVS.std() + 1e-8)).unsqueeze(-1)
+        TARGETVAL = ADVS.squeeze(-1) + STATEVALSNEW
 
         # Making critic losses
-        t_state_vals_clipped = t_state_old_vals + torch.clamp(t_state_vals - t_state_old_vals, - self.cliprange, self.cliprange)
+        t_state_vals_clipped = OLDVALS + torch.clamp(t_state_vals - OLDVALS, - self.CLIPRANGE, self.CLIPRANGE)
+
+        # print('Value:', STATEVALSNEW.mean())
+        # print('Target:', RETURNS.mean())
+        # print('Unsquared loss1:', (STATEVALSNEW - RETURNS).mean())
+        # print('Unsquared loss2:', (t_state_vals_clipped.detach() - RETURNS).mean())
+        # print('-'*15)
 
         # Making critic final loss
-        t_critic_loss1 = self.lossfun(t_state_vals, t_target_state_vals)
-        t_critic_loss2 = self.lossfun(t_state_vals_clipped, t_target_state_vals)
+        t_critic_loss1 = self.lossfun(t_state_vals, TARGETVAL)
+        t_critic_loss2 = self.lossfun(t_state_vals_clipped, TARGETVAL)
         t_critic_loss = .5 * torch.max(t_critic_loss1, t_critic_loss2).mean()
 
         # Getting log probs
-        t_new_log_probs = t_distrib.log_prob(t_actions)
+        t_new_log_probs = t_distrib.log_prob(ACTIONS)
 
         # Calculating ratio
-        t_ratio = torch.exp(t_new_log_probs - t_old_log_probs)
+        t_ratio = torch.exp(t_new_log_probs - OLDLOGPROBS)
 
-        approxkl = (.5 * torch.mean((t_old_log_probs - t_new_log_probs).pow(2))).item()
-        clipfrac = torch.mean((torch.abs(t_ratio - 1.0) > self.cliprange).float()).item()
+        approxkl = (.5 * torch.mean((OLDLOGPROBS - t_new_log_probs) ** 2)).item()
+        clipfrac = torch.mean((torch.abs(t_ratio - 1.0) > self.CLIPRANGE).float()).item()
 
         # Calculating surrogates
-        t_rt1 = torch.mul(t_advantages, t_ratio)
-        t_rt2 = torch.mul(t_advantages, torch.clamp(t_ratio, 1 - self.cliprange, 1 + self.cliprange))
+        t_rt1 = torch.mul(ADVS, t_ratio)
+        t_rt2 = torch.mul(ADVS, torch.clamp(t_ratio, 1 - self.CLIPRANGE, 1 + self.CLIPRANGE))
         t_actor_loss = torch.min(t_rt1, t_rt2).mean()
 
         # Calculating entropy
@@ -289,18 +288,12 @@ class PPO(base.BaseAlgo):
         t_loss.backward()
 
         # Normalizing gradients
-        torch.nn.utils.clip_grad_norm_(self._nnet.parameters(), self.max_grad_norm)
+        torch.nn.utils.clip_grad_norm_(self._nnet.parameters(), self.MAX_GRAD_NORM)
 
         # Optimizer step
         self._optimizer.step()
         self.lr_scheduler.step()
 
-        return t_actor_loss.item(), t_critic_loss.item(), t_entropy.item(), approxkl, clipfrac, \
-               logger.explained_variance(t_state_vals.detach().cpu().numpy(), t_target_state_vals.detach().cpu().numpy()), \
+        return - t_actor_loss.item(), t_critic_loss.item(), t_entropy.item(), approxkl, clipfrac, \
+               logger.explained_variance(t_state_vals.detach().cpu().numpy(), RETURNS.detach().cpu().numpy()), \
                (self.lr_scheduler.get_lr()[0], self.lr_scheduler.get_count())
-
-    def _gae(self, td_residual, dones):
-        for i in reversed(range(td_residual.shape[0] - 1)):
-            td_residual[i] += self.lam * self.gamma * (1. - dones[i]) * td_residual[i + 1]
-
-        return td_residual

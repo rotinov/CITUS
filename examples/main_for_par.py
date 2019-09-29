@@ -3,10 +3,9 @@ import torch
 import time
 
 
-# env = gym.make("InvertedDoublePendulum-v2")
-# env = gym.make("CartPole-v1")
+env_name3 = "Walker2d-v2"
 if __name__ == '__main__':
-    envs = agnes.make_vec_env("InvertedDoublePendulum-v2", envs_num=8)
+    envs = agnes.make_vec_env(env_name3)
 
     runner = agnes.Distributed(envs, agnes.PPO, agnes.MLP)
     runner.log(agnes.log, agnes.TensorboardLogger(".logs/"+str(time.time())))

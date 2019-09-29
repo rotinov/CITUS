@@ -8,8 +8,8 @@ env_name3 = "InvertedDoublePendulum-v2"
 
 
 if __name__ == '__main__':
-    envs = agnes.make_vec_env(env_name3)
+    envs = agnes.make_vec_env(env_name3, envs_num=32)
 
     runner = agnes.Single(envs, agnes.PPO, agnes.MLP)
-    runner.log(agnes.log, agnes.TensorboardLogger(".logs/"+str(time.time())))
+    runner.log(agnes.TensorboardLogger(".logs/"+str(time.time())))
     runner.run()
