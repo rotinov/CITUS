@@ -22,14 +22,14 @@ class Monitor(Wrapper):
         self.episode_lengths = []
         self.episode_times = []
         self.total_steps = 0
-        self.current_reset_info = {} # extra info about the current episode, that was passed in during reset()
+        self.current_reset_info = {}  # extra info about the current episode, that was passed in during reset()
 
     def reset(self, **kwargs):
         self.reset_state()
         for k in self.reset_keywords:
             v = kwargs.get(k)
             if v is None:
-                raise ValueError('Expected you to pass kwarg %s into reset'%k)
+                raise ValueError('Expected you to pass kwarg %s into reset' % k)
             self.current_reset_info[k] = v
         return self.env.reset(**kwargs)
 
@@ -44,7 +44,7 @@ class Monitor(Wrapper):
             raise RuntimeError("Tried to step environment that needs reset")
         ob, rew, done, info = self.env.step(action)
         self.update(ob, rew, done, info)
-        return (ob, rew, done, info)
+        return ob, rew, done, info
 
     def update(self, ob, rew, done, info):
         self.rewards.append(rew)

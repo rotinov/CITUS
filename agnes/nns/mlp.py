@@ -77,10 +77,10 @@ class MLPDiscrete(nn.Module):
         dist, state_value = self.forward(x)
         action = dist.sample()
 
-        return action.detach().squeeze(-1).cpu().numpy(), \
-               action.detach().squeeze(-1).cpu().numpy(), \
-               (dist.log_prob(action).detach().squeeze(-1).cpu().numpy(),
-                state_value.detach().squeeze(-1).cpu().numpy())
+        return (action.detach().squeeze(-1).cpu().numpy(),
+                action.detach().squeeze(-1).cpu().numpy(),
+                (dist.log_prob(action).detach().squeeze(-1).cpu().numpy(),
+                 state_value.detach().squeeze(-1).cpu().numpy()))
 
 
 class MLPContinuous(nn.Module):
@@ -145,10 +145,10 @@ class MLPContinuous(nn.Module):
         smpled = dist.sample()
         action = torch.clamp(smpled, self.action_space.low[0], self.action_space.high[0])
 
-        return action.detach().cpu().numpy(), \
-               smpled.detach().cpu().numpy(), \
-               (dist.log_prob(smpled).detach().cpu().numpy(),
-                state_value.detach().cpu().numpy())
+        return (action.detach().cpu().numpy(),
+                smpled.detach().cpu().numpy(),
+                (dist.log_prob(smpled).detach().cpu().numpy(),
+                 state_value.detach().cpu().numpy()))
 
 
 def MLP(observation_space=spaces.Box(low=-10, high=10, shape=(1,)),
@@ -156,7 +156,6 @@ def MLP(observation_space=spaces.Box(low=-10, high=10, shape=(1,)),
         logstd=0.0):
     if len(observation_space.shape) == 3:
         warnings.warn("Looks like you're using MLP for images. CNN is recommended.")
-
 
     if isinstance(action_space, spaces.Box):
         return MLPContinuous(observation_space, action_space, logstd)
