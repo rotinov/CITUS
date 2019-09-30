@@ -69,7 +69,7 @@ class TensorboardLogger:
     def __init__(self, path=".logs/"+str(time.time())):
         self.path = path
 
-    def __call__(self, kvpairs):
+    def __call__(self, kvpairs, nupdates):
 
         if self.first:
             self.writer = SummaryWriter(log_dir=self.path)
