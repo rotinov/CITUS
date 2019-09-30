@@ -80,7 +80,7 @@ class PPO(base.BaseAlgo):
 
         if trainer:
             self._optimizer = torch.optim.Adam(self._nnet.parameters(), lr=self.learning_rate, betas=(0.99, 0.999),
-                                               eps=1e-5)
+                                               eps=1e-3)
 
             self.lr_scheduler = schedules.LinearAnnealingLR(self._optimizer, eta_min=0.0,  # 1e-6
                                                             to_epoch=final_epoch)
@@ -243,7 +243,7 @@ class PPO(base.BaseAlgo):
 
         STATEVALSNEW = t_state_vals.detach()
         OLDVALS = OLDVALS.view_as(t_state_vals)
-        ADVANTAGES = RETURNS - OLDVALS
+        ADVANTAGES = RETURNS - STATEVALSNEW
 
         # Normalizing advantages
         ADVS = ((ADVANTAGES - ADVANTAGES.mean()) / (ADVANTAGES.std() + 1e-8)).unsqueeze(-1)
