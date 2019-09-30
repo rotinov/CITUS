@@ -62,8 +62,8 @@ class Distributed:
             data = self.communication.gather((), root=0)[1:]
 
             if data:
-                if self.logger.is_active():
-                    print("Done.")
+                self.logger.done()
+
                 batch = []
                 info_arr = []
                 for item in data:
@@ -100,8 +100,7 @@ class Distributed:
 
                     lr_things = []
 
-                if self.logger.is_active():
-                    print("Stepping environment...")
+                self.logger.stepping_environment()
 
         MPI.Finalize()
 
@@ -158,5 +157,3 @@ class Distributed:
         self.env.close()
 
         del self.env
-        if self.logger.is_active():
-            del self.logger

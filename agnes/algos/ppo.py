@@ -79,7 +79,8 @@ class PPO(base.BaseAlgo):
         final_epoch = int(self.final_timestep / self.nsteps * self.nminibatches * self.noptepochs)  # 312500
 
         if trainer:
-            self._optimizer = torch.optim.Adam(self._nnet.parameters(), lr=self.learning_rate, betas=(0.99, 0.999),
+            self._optimizer = torch.optim.Adam(self._nnet.parameters(), lr=self.learning_rate,
+                                               betas=(0.99, 0.999),
                                                eps=1e-3)
 
             self.lr_scheduler = schedules.LinearAnnealingLR(self._optimizer, eta_min=0.0,  # 1e-6
@@ -189,27 +190,28 @@ class PPO(base.BaseAlgo):
         n_shape = n_dones.shape
 
         n_state_vals = numpy.asarray(old_vals)
-        n_new_state_vals = numpy.asarray(old_vals)
-        n_new_state_vals[:-1] = n_new_state_vals[1:]
 
         with torch.no_grad():
             if self._device == torch.device('cpu'):
                 t_nstates = torch.FloatTensor(nstates[-1])
             else:
                 t_nstates = torch.cuda.FloatTensor(nstates[-1])
-            n_new_state_vals[-1] = self._nnet(t_nstates)[1].detach().squeeze(-1).cpu().numpy()
+            last_values = self._nnet(t_nstates)[1].detach().squeeze(-1).cpu().numpy()
 
-            n_new_state_vals = n_new_state_vals.reshape(n_shape)
             n_state_vals = n_state_vals.reshape(n_shape)
 
-        # Making td residual
-        td_residual = - n_state_vals.reshape(n_shape) + n_rewards + self.GAMMA * (1. - n_dones) * n_new_state_vals
-
         # Making GAE from td residual
-        n_advs = td_residual
-        gaelam = 0
-        for i in reversed(range(n_advs.shape[0])):
-            n_advs[i] = gaelam = n_advs[i] + self.lam * self.GAMMA * (1. - n_dones[i]) * gaelam
+        n_advs = numpy.zeros_like(n_state_vals)
+        lastgaelam = 0
+        for t in reversed(range(n_advs.shape[0])):
+            if t == n_advs.shape[0] - 1:
+                nextvalues = last_values
+            else:
+                nextvalues = n_state_vals[t+1]
+
+            nextnonterminal = 1. - n_dones[t]
+            delta = n_rewards[t] + self.GAMMA * nextnonterminal * nextvalues - n_state_vals[t]
+            n_advs[t] = lastgaelam = delta + self.lam * self.GAMMA * nextnonterminal * lastgaelam
 
         n_returns = n_advs + n_state_vals
 
@@ -227,8 +229,7 @@ class PPO(base.BaseAlgo):
             li_old_log_probs = numpy.asarray(old_log_probs)
             li_old_log_probs = li_old_log_probs.reshape((-1,) + li_old_log_probs.shape[2:])
 
-            li_n_returns = n_returns
-            li_n_returns = li_n_returns.reshape((-1,) + li_n_returns.shape[2:])
+            li_n_returns = n_returns.reshape((-1,) + n_returns.shape[2:])
 
             transitions = (li_states, li_actions, li_old_log_probs, li_old_vals, li_n_returns)
 
@@ -241,27 +242,21 @@ class PPO(base.BaseAlgo):
         t_distrib, t_state_vals_un = self._nnet(STATES)
         t_state_vals = t_state_vals_un.squeeze(-1)
 
-        STATEVALSNEW = t_state_vals.detach()
         OLDVALS = OLDVALS.view_as(t_state_vals)
-        ADVANTAGES = RETURNS - STATEVALSNEW
+        ADVANTAGES = RETURNS - t_state_vals.detach()
 
         # Normalizing advantages
         ADVS = ((ADVANTAGES - ADVANTAGES.mean()) / (ADVANTAGES.std() + 1e-8)).unsqueeze(-1)
-        TARGETVAL = RETURNS
 
         # Making critic losses
-        t_state_vals_clipped = OLDVALS + torch.clamp(t_state_vals - OLDVALS, - self.CLIPRANGE, self.CLIPRANGE)
-
-        # print('Value:', STATEVALSNEW.mean())
-        # print('Target:', TARGETVAL.mean())
-        # print('Unsquared loss1:', (STATEVALSNEW - TARGETVAL).mean())
-        # print('Unsquared loss2:', (t_state_vals_clipped.detach() - TARGETVAL).mean())
-        # print('-'*15)
+        t_state_vals_clipped = OLDVALS + torch.clamp(t_state_vals - OLDVALS,
+                                                     - self.CLIPRANGE,
+                                                     self.CLIPRANGE)
 
         # Making critic final loss
-        t_critic_loss1 = (t_state_vals - TARGETVAL) ** 2
-        t_critic_loss2 = (t_state_vals_clipped - TARGETVAL) ** 2
-        t_critic_loss = .5 * torch.max(t_critic_loss1, t_critic_loss2).mean()
+        t_critic_loss1 = (t_state_vals - RETURNS).pow(2)
+        t_critic_loss2 = (t_state_vals_clipped - RETURNS).pow(2)
+        t_critic_loss = 0.5 * torch.mean(torch.max(t_critic_loss1, t_critic_loss2))
 
         # Getting log probs
         t_new_log_probs = t_distrib.log_prob(ACTIONS)
@@ -298,5 +293,4 @@ class PPO(base.BaseAlgo):
         self.lr_scheduler.step()
 
         return - t_actor_loss.item(), t_critic_loss.item(), t_entropy.item(), approxkl, clipfrac, \
-               logger.explained_variance(t_state_vals.detach().cpu().numpy(), RETURNS.detach().cpu().numpy()), \
-               (self.lr_scheduler.get_lr()[0], self.lr_scheduler.get_count())
+               logger.explained_variance(t_state_vals.detach().cpu().numpy(), RETURNS.detach().cpu().numpy()), ()
