@@ -53,6 +53,7 @@ class Distributed:
         print(self.trainer.device_info(), 'will be used.')
         lr_things = []
         nupdates = 0
+        b_time = time.time()
         print("Stepping environment...")
 
         finish = False
@@ -94,9 +95,24 @@ class Distributed:
                 if nupdates % log_interval == 0:
                     actor_loss, critic_loss, entropy, approxkl, clipfrac, variance, debug = zip(*lr_things)
 
-                    self.logger(len_arr, rew_arr, entropy,
-                                actor_loss, critic_loss, nupdates,
-                                logger.safemean(frames), approxkl, clipfrac, variance, zip(*debug))
+                    time_now = time.time()
+                    kvpairs = {
+                        "eplenmean": logger.safemean(len_arr).reshape(-1),
+                        "eprewmean": logger.safemean(rew_arr).reshape(-1),
+                        "fps": logger.safemean(frames) / max(1e-8, float(time_now - b_time)),
+                        "loss/approxkl": logger.safemean(approxkl),
+                        "loss/clipfrac": logger.safemean(clipfrac),
+                        "loss/policy_entropy": logger.safemean(entropy),
+                        "loss/policy_loss": logger.safemean(actor_loss),
+                        "loss/value_loss": logger.safemean(critic_loss),
+                        "misc/explained_variance": logger.safemean(variance),
+                        "misc/nupdates": nupdates,
+                        "misc/serial_timesteps": logger.safemean(frames),
+                        "misc/time_elapsed": int(time_now - b_time),
+                        "misc/total_timesteps": logger.safemean(frames)
+                    }
+
+                    self.logger(kvpairs, nupdates)
 
                     lr_things = []
 
