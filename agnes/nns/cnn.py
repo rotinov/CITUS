@@ -139,6 +139,7 @@ class CNNDiscreteCopy(nn.Module):
     def type_of_out():
         return torch.int16
 
+    # noinspection PyUnboundLocalVariable
     def forward(self, x):
         compressed = False
         if x.ndimension() == 5:
@@ -154,6 +155,7 @@ class CNNDiscreteCopy(nn.Module):
         policy = self.actor_head(xt)
 
         if compressed:
+            # noinspection PyUnboundLocalVariable
             state_value = state_value.view(f, s)
             policy = policy.view(f, s, -1)
 
@@ -187,10 +189,10 @@ class CNNDiscreteCopy(nn.Module):
         dist, state_value = self.forward(x)
         action = dist.sample()
 
-        return action.detach().cpu().numpy(), \
-               action.detach().cpu().numpy(), \
-               (dist.log_prob(action).detach().cpu().numpy(),
-                state_value.detach().squeeze(-1).cpu().numpy())
+        return (action.detach().cpu().numpy(),
+                action.detach().cpu().numpy(),
+                (dist.log_prob(action).detach().cpu().numpy(),
+                 state_value.detach().squeeze(-1).cpu().numpy()))
 
 
 class CNNDiscreteShared(nn.Module):
@@ -265,10 +267,10 @@ class CNNDiscreteShared(nn.Module):
         dist, state_value = self.forward(x)
         action = dist.sample()
 
-        return action.detach().cpu().numpy(), \
-               action.detach().cpu().numpy(), \
-               (dist.log_prob(action).detach().cpu().numpy(),
-                state_value.detach().squeeze(-1).cpu().numpy())
+        return (action.detach().cpu().numpy(),
+                action.detach().cpu().numpy(),
+                (dist.log_prob(action).detach().cpu().numpy(),
+                 state_value.detach().squeeze(-1).cpu().numpy()))
 
 
 class CNNChooser:

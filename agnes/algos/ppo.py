@@ -292,5 +292,12 @@ class PPO(base.BaseAlgo):
         self._optimizer.step()
         self.lr_scheduler.step()
 
-        return - t_actor_loss.item(), t_critic_loss.item(), t_entropy.item(), approxkl, clipfrac, \
-               logger.explained_variance(t_state_vals.detach().cpu().numpy(), RETURNS.detach().cpu().numpy()), ()
+        return (- t_actor_loss.item(),
+                t_critic_loss.item(),
+                t_entropy.item(),
+                approxkl,
+                clipfrac,
+                logger.explained_variance(t_state_vals.detach().cpu().numpy(),
+                                          RETURNS.detach().cpu().numpy()),
+                ()
+                )
