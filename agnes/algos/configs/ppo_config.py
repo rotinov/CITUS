@@ -35,17 +35,17 @@ def mujoco_config():
 
 def classic_config():
     return dict(
-        timesteps=10e5,
-        nsteps=1024,
-        nminibatches=32,
-        noptepochs=2,
-        gamma=0.99,
-        lam=0.95,
-        learning_rate=3e-5,
+        timesteps=30000,
+        nsteps=128,
+        nminibatches=4,
+        gamma=1.0,
+        lam=0.0,
+        noptepochs=4,
         max_grad_norm=0.5,
-        cliprange=0.2,
-        vf_coef=0.1,
-        ent_coef=0.0001
+        learning_rate=2.5e-4,
+        cliprange=0.1,
+        vf_coef=0.5,
+        ent_coef=.01
     )
 
 

@@ -21,5 +21,5 @@ def test_single():
     env = agnes.make_env('CartPole-v0')
 
     runner = agnes.Single(env, agnes.PPO, agnes.MLP, config=test_config())
-    # runner.log(agnes.log)
+    runner.log(agnes.log)
     runner.run()

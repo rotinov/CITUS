@@ -3,7 +3,8 @@ import re
 from collections import defaultdict
 import multiprocessing
 
-from agnes.common.envs_prep import wrap_deepmind, make_atari, SubprocVecEnv, DummyVecEnv, VecFrameStack
+from agnes.common.envs_prep import wrap_deepmind, make_atari, SubprocVecEnv, DummyVecEnv, VecFrameStack, VecNormalize
+from agnes.common.envs_prep import Monitor
 
 
 _game_envs = defaultdict(set)
@@ -24,6 +25,9 @@ def make_vec_env(env, envs_num=multiprocessing.cpu_count()):
         envs, num_envs = wrap_vec_custom(env, envs_num=envs_num)
         env_type = 'custom'
 
+    if env_type == 'mujoco':
+        envs = VecNormalize(envs)
+
     return envs, env_type, num_envs
 
 
@@ -38,6 +42,9 @@ def make_env(env):
     else:
         envs, num_envs = wrap_vec_custom(env, envs_num=1)
         env_type = 'custom'
+
+    if env_type == 'mujoco':
+        envs = VecNormalize(envs)
 
     return envs, env_type, 1
 
@@ -69,7 +76,7 @@ def get_env_type(env: str):
 def wrap_vec_atari(env_name, envs_num=multiprocessing.cpu_count()):
     def make_env():
         def _thunk():
-            env = wrap_deepmind(make_atari(env_name))
+            env = Monitor(wrap_deepmind(make_atari(env_name)), allow_early_resets=True)
             return env
 
         return _thunk
@@ -89,7 +96,7 @@ def wrap_vec_atari(env_name, envs_num=multiprocessing.cpu_count()):
 def wrap_vec_gym(env_name, envs_num=multiprocessing.cpu_count()):
     def make_env():
         def _thunk():
-            return gym.make(env_name)
+            return Monitor(gym.make(env_name), allow_early_resets=True)
 
         return _thunk
 
@@ -105,7 +112,7 @@ def wrap_vec_gym(env_name, envs_num=multiprocessing.cpu_count()):
 
 def wrap_vec_custom(env_init_fun, envs_num=multiprocessing.cpu_count()):
     def make_env():
-        return env_init_fun
+        return Monitor(env_init_fun, allow_early_resets=True)
 
     envs = [make_env() for _ in range(envs_num)]
 
