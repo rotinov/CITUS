@@ -26,6 +26,8 @@ class Single:
         print('Env type: ', self.env_type, 'Envs num:', vec_num)
 
         self.trainer = algo(nn, env.observation_space, env.action_space, self.cnfg, workers=vec_num)
+
+        self.worker = algo(nn, env.observation_space, env.action_space, self.cnfg, workers=vec_num, trainer=False)
         if cuda.is_available():
             try:
                 self.trainer = self.trainer.to('cuda:0')
@@ -59,6 +61,8 @@ class Single:
             lr_thing = self.trainer.train(data)
             lr_things.extend(lr_thing)
             epinfobuf.extend(epinfos)
+            
+            self.worker.update(self.trainer)
 
             if nupdates % log_interval == 0 or (lr_things and nupdates == run_times - 1):
                 actor_loss, critic_loss, entropy, approxkl, clipfrac, variance, debug = zip(*lr_things)
@@ -89,7 +93,7 @@ class Single:
         data = None
         epinfos = []
         for step in range(self.nsteps):
-            action, pred_action, out = self.trainer(self.state)
+            action, pred_action, out = self.worker(self.state)
             nstate, reward, done, infos = self.env.step(action)
             for info in infos:
                 maybeepinfo = info.get('episode')

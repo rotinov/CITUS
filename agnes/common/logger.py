@@ -78,7 +78,7 @@ class TensorboardLogger:
         for (key, val) in sorted(kvpairs.items()):
             self.writer.add_scalar(key, val, nupdates)
 
-        self.writer.flush()
+        # self.writer.flush()
 
     def __del__(self):
         pass
