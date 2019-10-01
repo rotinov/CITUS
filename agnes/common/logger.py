@@ -7,89 +7,103 @@ def safemean(xs):
     return numpy.nan if len(xs) == 0 else numpy.mean(xs)
 
 
+def explained_variance(ypred, y):
+    """
+    Computes fraction of variance that ypred explains about y.
+    Returns 1 - Var[y-ypred] / Var[y]
+    interpretation:
+        ev=0  =>  might as well have predicted zero
+        ev=1  =>  perfect prediction
+        ev<0  =>  worse than just predicting zero
+    """
+    assert y.ndim == 1 and ypred.ndim == 1
+    vary = numpy.var(y)
+    return numpy.nan if vary == 0 else 1 - numpy.var(y-ypred) / vary
+
+
 class StandardLogger:
     def __init__(self):
-        self.b_time = time.time()
+        pass
 
-    def __call__(self, eplenmean, rewardarr, entropy, actor_loss, critic_loss,
-                 nupdates, frames, approxkl, clipfrac, variance, debug):
-        time_now = time.time()
+    def __call__(self, kvpairs, nupdates):
+        key2str = {}
+        for (key, val) in sorted(kvpairs.items()):
+            if isinstance(val, float):
+                valstr = '%-8.3g' % (val,)
+            else:
+                valstr = str(val)
+            key2str[self._truncate(key)] = self._truncate(valstr)
 
-        print('-' * 43)
-        print('| eplenmean:               |', '{: 10.2f}'.format(safemean(eplenmean)).rjust(10, ' '), '  |',
-              '\n| eprewmean:               |', '{: 10.2f}'.format(safemean(rewardarr)).rjust(10, ' '), '  |',
-              '\n| fps:                     |', '{: 10.2f}'.format(
-                frames / max(1e-8, float(time_now - self.b_time))).rjust(10, ' '), '  |',
-              '\n| loss/approxkl:           |', '{: .2e}'.format(safemean(approxkl)).rjust(10, ' '), '  |',
-              '\n| loss/clipfrac:           |', '{: .2e}'.format(safemean(clipfrac)).rjust(10, ' '), '  |',
-              '\n| loss/policy_entropy:     |', '{: .2e}'.format(safemean(entropy)).rjust(10, ' '), '  |',
-              '\n| loss/policy_loss:        |', '{: .2e}'.format(safemean(actor_loss)).rjust(10, ' '), '  |',
-              '\n| loss/value_loss:         |', '{: .2e}'.format(safemean(critic_loss)).rjust(10, ' '), '  |',
-              '\n| misc/explained_variance: |', '{: .2e}'.format(safemean(variance)).rjust(10, ' '), '  |',
-              '\n| misc/nupdates:           |', '{: .2e}'.format(nupdates).rjust(10, ' '), '  |',
-              '\n| misc/serial_timesteps:   |', '{: .2e}'.format(frames).rjust(10, ' '), '  |',
-              '\n| misc/time_elapsed:       |', '{: .2e}'.format(int(time_now - self.b_time)).rjust(10, ' '), '  |')
+        if len(key2str) == 0:
+            print('WARNING: tried to write empty key-value dict')
+            return
+        else:
+            keywidth = max(map(len, key2str.keys()))
+            valwidth = max(map(len, key2str.values()))
 
-        i = 1
-        for item in debug:
-            print('| misc/debug {:2d}:           |'.format(i), '{:.2e}'.format(safemean(item)).rjust(10, ' '), '  |')
-            i += 1
+            # Write out the data
+        dashes = '-' * (keywidth + valwidth + 7)
+        lines = [dashes]
+        for (key, val) in sorted(key2str.items(), key=lambda kv: kv[0].lower()):
+            lines.append('| %s%s | %s%s |' % (
+                key,
+                ' ' * (keywidth - len(key)),
+                val,
+                ' ' * (valwidth - len(val)),
+            ))
+        lines.append(dashes)
+        print('\n'.join(lines))
 
-        print('-' * 43)
+    @staticmethod
+    def _truncate(s):
+        maxlen = 30
+        return s[:maxlen - 3] + '...' if len(s) > maxlen else s
 
 
 log = StandardLogger()
 
 
 class TensorboardLogger:
+    first = True
+
     def __init__(self, path=".logs/"+str(time.time())):
-        self.writer = SummaryWriter(log_dir=path)
-        self.b_time = time.time()
+        self.path = path
 
-    def __call__(self, eplenmean, rewardarr, entropy, actor_loss, critic_loss,
-                 nupdates, frames, approxkl, clipfrac, variance, debug):
-        time_now = time.time()
+    def __call__(self, kvpairs, nupdates):
 
-        self.writer.add_scalar("eplenmean", safemean(eplenmean), nupdates)
-        self.writer.add_scalar("eprewmean", safemean(rewardarr), nupdates)
-        self.writer.add_scalar("fps", frames / max(1e-8, float(time_now - self.b_time)), nupdates)
+        if self.first:
+            self.writer = SummaryWriter(log_dir=self.path)
+            self.first = False
 
-        self.writer.add_scalar("loss/approxkl", safemean(approxkl), nupdates)
-        self.writer.add_scalar("loss/clipfrac", safemean(clipfrac), nupdates)
-        self.writer.add_scalar("loss/policy_entropy", safemean(entropy), nupdates)
-        self.writer.add_scalar("loss/policy_loss", safemean(actor_loss), nupdates)
-        self.writer.add_scalar("loss/value_loss", safemean(critic_loss), nupdates)
-
-        self.writer.add_scalar("misc/explained_variance", safemean(variance), nupdates)
-        self.writer.add_scalar("misc/nupdates", nupdates, nupdates)
-        self.writer.add_scalar("misc/serial_timesteps", frames, nupdates)
-        self.writer.add_scalar("misc/time_elapsed", float(time_now - self.b_time), nupdates)
-
-        i = 1
-        for item in debug:
-            self.writer.add_scalar("misc/debug {:2d}".format(i), safemean(item), nupdates)
-            i += 1
+        for (key, val) in sorted(kvpairs.items()):
+            self.writer.add_scalar(key, val, nupdates)
 
         self.writer.flush()
 
     def __del__(self):
-        self.writer.close()
+        pass
 
 
 class ListLogger:
     def __init__(self, args=[]):
         self.loggers = args
 
-    def __call__(self, eplenmean, rewardarr, entropy, actor_loss, critic_loss,
-                 nupdates, frames, approxkl, clipfrac, variance, debug):
-        data = (eplenmean, rewardarr, entropy, actor_loss, critic_loss,
-                nupdates, frames, approxkl, clipfrac, variance, list(debug))
+    def __call__(self, kvpairs, nupdates):
         for logger in self.loggers:
-            logger(*data)
+            logger(kvpairs, nupdates)
+
+    def stepping_environment(self):
+        for logger in self.loggers:
+            if isinstance(logger, StandardLogger):
+                print("Stepping environment...")
+                return
+
+    def done(self):
+        for logger in self.loggers:
+            if isinstance(logger, StandardLogger):
+                print("Done.")
+                return
 
     def __del__(self):
         if len(self.loggers) != 0:
             del self.loggers
-
-    def is_active(self):
-        return len(self.loggers) != 0

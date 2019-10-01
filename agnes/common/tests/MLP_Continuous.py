@@ -6,7 +6,7 @@ def test_config():
         timesteps=30000,
         nsteps=128,
         nminibatches=4,
-        gamma=1.0,
+        gamma=0.99,
         lam=0.95,
         noptepochs=4,
         max_grad_norm=0.5,
