@@ -37,7 +37,8 @@ class Distributed:
             self.worker = algo(nn, env.observation_space, env.action_space, self.cnfg, trainer=False)
 
     def log(self, *args):
-        self.logger = logger.ListLogger(args)
+        if self.is_trainer():
+            self.logger = logger.ListLogger(args)
 
     def run(self, log_interval=1):
         if self.communication.Get_rank() == 0:
@@ -52,6 +53,7 @@ class Distributed:
         print(self.trainer.device_info(), 'will be used.')
         lr_things = []
         nupdates = 0
+        b_time = time.time()
         print("Stepping environment...")
 
         finish = False
@@ -61,8 +63,8 @@ class Distributed:
             data = self.communication.gather((), root=0)[1:]
 
             if data:
-                if self.logger.is_active():
-                    print("Done.")
+                self.logger.done()
+
                 batch = []
                 info_arr = []
                 for item in data:
@@ -93,14 +95,28 @@ class Distributed:
                 if nupdates % log_interval == 0:
                     actor_loss, critic_loss, entropy, approxkl, clipfrac, variance, debug = zip(*lr_things)
 
-                    self.logger(len_arr, rew_arr, entropy,
-                                actor_loss, critic_loss, nupdates,
-                                logger.safemean(frames), approxkl, clipfrac, variance, zip(*debug))
+                    time_now = time.time()
+                    kvpairs = {
+                        "eplenmean": logger.safemean(len_arr).reshape(-1),
+                        "eprewmean": logger.safemean(rew_arr).reshape(-1),
+                        "fps": logger.safemean(frames) / max(1e-8, float(time_now - b_time)),
+                        "loss/approxkl": logger.safemean(approxkl),
+                        "loss/clipfrac": logger.safemean(clipfrac),
+                        "loss/policy_entropy": logger.safemean(entropy),
+                        "loss/policy_loss": logger.safemean(actor_loss),
+                        "loss/value_loss": logger.safemean(critic_loss),
+                        "misc/explained_variance": logger.safemean(variance),
+                        "misc/nupdates": nupdates,
+                        "misc/serial_timesteps": logger.safemean(frames),
+                        "misc/time_elapsed": int(time_now - b_time),
+                        "misc/total_timesteps": logger.safemean(frames)
+                    }
+
+                    self.logger(kvpairs, nupdates)
 
                     lr_things = []
 
-                if self.logger.is_active():
-                    print("Stepping environment...")
+                self.logger.stepping_environment()
 
         MPI.Finalize()
 
@@ -110,8 +126,8 @@ class Distributed:
         timesteps = self.cnfg['timesteps']
 
         frames = 0
-        eplenmean = [deque(maxlen=5)]*self.vec_num
-        rewardarr = [deque(maxlen=5)]*self.vec_num
+        eplenmean = [[]] * self.vec_num
+        rewardarr = [[]] * self.vec_num
         rewardsum = numpy.zeros(self.vec_num)
         beg = numpy.zeros(self.vec_num)
         state = self.env.reset()
@@ -134,6 +150,8 @@ class Distributed:
                 self.communication.gather(((eplenmean, rewardarr, frames), data), root=0)
 
                 self.worker.load_state_dict(self.communication.bcast(None, root=0))
+                eplenmean = [[]] * self.vec_num
+                rewardarr = [[]] * self.vec_num
 
             state = nstate
             frames += 1
@@ -155,5 +173,3 @@ class Distributed:
         self.env.close()
 
         del self.env
-        if self.logger.is_active():
-            del self.logger

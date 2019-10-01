@@ -3,13 +3,13 @@ import agnes
 from agnes.common import logger
 from torch import cuda
 import numpy
+import time
 
 
 class Single:
     """"Single" runner releases learning with a single worker that is also a trainer.
     "Single" runner is compatible with vector environments(config or env_type should be specified manually).
     """
-    logger = logger.ListLogger()
 
     def __init__(self, env,
                  algo: agnes.algos.base.BaseAlgo.__class__ = agnes.algos.PPO,
@@ -27,7 +27,12 @@ class Single:
 
         self.trainer = algo(nn, env.observation_space, env.action_space, self.cnfg, workers=vec_num)
         if cuda.is_available():
-            self.trainer = self.trainer.to('cuda:0')
+            try:
+                self.trainer = self.trainer.to('cuda:0')
+            except RuntimeError:
+                self.trainer = self.trainer.to('cpu')
+
+        self.logger = logger.ListLogger()
 
     def log(self, *args):
         self.logger = logger.ListLogger(args)
@@ -35,70 +40,71 @@ class Single:
     def run(self, log_interval=1):
         print(self.trainer.device_info(), 'will be used.')
         timesteps = self.cnfg['timesteps']
+        self.nsteps = self.cnfg['nsteps']
+        b_time = time.time()
 
-        frames = 0
-        nupdates = 0
-        eplenmean = [deque(maxlen=5*log_interval)]*self.vec_num
-        rewardarr = [deque(maxlen=5*log_interval)]*self.vec_num
         lr_things = []
-        print("Stepping environment...")
 
-        state = self.env.reset()
+        self.state = self.env.reset()
 
-        rewardsum = numpy.zeros(self.vec_num)
-        beg = numpy.zeros(self.vec_num)
+        run_times = int(numpy.ceil(timesteps / self.nsteps))
+        epinfobuf = deque(maxlen=100)
 
-        while frames < timesteps:
+        for nupdates in range(run_times):
+            self.logger.stepping_environment()
 
-            action, pred_action, out = self.trainer(state)
+            data, epinfos = self._one_run()
 
-            nstate, reward, done, _ = self.env.step(action)
-            rewardsum += numpy.array(reward)
+            self.logger.done()
+            lr_thing = self.trainer.train(data)
+            lr_things.extend(lr_thing)
+            epinfobuf.extend(epinfos)
 
-            transition = (state, pred_action, nstate, reward, done, out)
-            data = self.trainer.experience(transition)
+            if nupdates % log_interval == 0 or (lr_things and nupdates == run_times - 1):
+                actor_loss, critic_loss, entropy, approxkl, clipfrac, variance, debug = zip(*lr_things)
 
-            if data:
-                if self.logger.is_active():
-                    print("Done.")
-                lr_thing = self.trainer.train(data)
-                lr_things.extend(lr_thing)
-                nupdates += 1
+                time_now = time.time()
+                kvpairs = {
+                    "eplenmean": logger.safemean(numpy.asarray([epinfo['l'] for epinfo in epinfobuf]).reshape(-1)),
+                    "eprewmean": logger.safemean(numpy.asarray([epinfo['r'] for epinfo in epinfobuf]).reshape(-1)),
+                    "fps": self.nsteps*nupdates / max(1e-8, float(time_now - b_time)),
+                    "loss/approxkl": logger.safemean(approxkl),
+                    "loss/clipfrac": logger.safemean(clipfrac),
+                    "loss/policy_entropy": logger.safemean(entropy),
+                    "loss/policy_loss": logger.safemean(actor_loss),
+                    "loss/value_loss": logger.safemean(critic_loss),
+                    "misc/explained_variance": logger.safemean(variance),
+                    "misc/nupdates": nupdates,
+                    "misc/serial_timesteps": self.nsteps*nupdates,
+                    "misc/time_elapsed": int(time_now - b_time),
+                    "misc/total_timesteps": self.nsteps*nupdates
+                }
 
-                if nupdates % log_interval == 0 and lr_things:
-                    actor_loss, critic_loss, entropy, approxkl, clipfrac, variance, debug = zip(*lr_things)
-                    self.logger(numpy.array(eplenmean).reshape(-1), numpy.array(rewardarr).reshape(-1), entropy,
-                                actor_loss, critic_loss, nupdates,
-                                frames, approxkl, clipfrac, variance, zip(*debug))
-                    lr_things = []
-
-                if self.logger.is_active():
-                    print("Stepping environment...")
-
-            state = nstate
-            frames += 1
-
-            for i in range(self.vec_num):
-                if done[i]:
-                    rewardarr[i].append(rewardsum[i])
-                    eplenmean[i].append(frames - beg[i])
-                    rewardsum[i] = 0
-                    beg[i] = frames
-
-        print("Done.")
+                self.logger(kvpairs, nupdates)
+                lr_things = []
 
         self.env.close()
 
-        if lr_things:
-            actor_loss, critic_loss, entropy, approxkl, clipfrac, variance, debug = zip(*lr_things)
-            self.logger(numpy.array(eplenmean).reshape(-1), numpy.array(rewardarr).reshape(-1), entropy,
-                        actor_loss, critic_loss, nupdates,
-                        frames, approxkl, clipfrac, variance, zip(*debug))
+    def _one_run(self):
+        data = None
+        epinfos = []
+        for step in range(self.nsteps):
+            action, pred_action, out = self.trainer(self.state)
+            nstate, reward, done, infos = self.env.step(action)
+            for info in infos:
+                maybeepinfo = info.get('episode')
+                if maybeepinfo:
+                    epinfos.append(maybeepinfo)
+
+            transition = (self.state, pred_action, nstate, reward, done, out)
+            data = self.trainer.experience(transition)
+
+            self.state = nstate
+
+        return data, epinfos
 
     def __del__(self):
         self.env.close()
 
         del self.env
-        if self.logger.is_active():
-            del self.logger
         del self.trainer
