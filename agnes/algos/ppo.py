@@ -34,7 +34,7 @@ class Buffer(base.BaseBuffer):
         return len(self.rollouts)
 
 
-class PPO(base.BaseAlgo):
+class PpoClass(base.BaseAlgo):
     _device = torch.device('cpu')
 
     get_config = get_config
@@ -325,7 +325,31 @@ class PPO(base.BaseAlgo):
                 t_entropy.item(),
                 approxkl,
                 clipfrac,
-                logger.explained_variance(t_state_vals.detach().cpu().numpy(),
-                                          RETURNS.detach().cpu().numpy()),
+                logger.explained_variance(t_state_vals.detach().cpu().numpy(), RETURNS.detach().cpu().numpy()),
                 ()
                 )
+
+
+class PpoInitializer:
+    def __init__(self):
+        pass
+
+    def __call__(self, nn,
+                 observation_space=gym.spaces.Discrete(5),
+                 action_space=gym.spaces.Discrete(5),
+                 cnfg=None,
+                 workers=1,
+                 trainer=True):
+        return PpoClass(nn,
+                        observation_space,
+                        action_space,
+                        cnfg,
+                        workers,
+                        trainer)
+
+    @staticmethod
+    def get_config(env_type):
+        return get_config(env_type)
+
+
+PPO = PpoInitializer()

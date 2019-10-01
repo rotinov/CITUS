@@ -3,3 +3,5 @@
 .logs/
 *.py___jb_tmp___
 *.pstat
+*.pth
+profile_instructions.txt
