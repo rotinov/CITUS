@@ -3,7 +3,7 @@ import re
 
 def atari_config():
     return dict(
-        timesteps=10e6,  # 5*128,  # 10e6,
+        timesteps=5*128,  # 10e6, # 10e6,  # 
         nsteps=128,
         nminibatches=4,
         gamma=0.99,
