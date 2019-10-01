@@ -25,6 +25,9 @@ class StandardLogger:
     def __init__(self):
         pass
 
+    def info(self, kvpairs):
+        pass
+
     def __call__(self, kvpairs, nupdates):
         key2str = {}
         for (key, val) in sorted(kvpairs.items()):
@@ -69,6 +72,14 @@ class TensorboardLogger:
     def __init__(self, path=".logs/"+str(time.time())):
         self.path = path
 
+    def info(self, kvpairs):
+        if self.first:
+            self.writer = SummaryWriter(log_dir=self.path)
+            self.first = False
+
+        for (key, val) in sorted(kvpairs.items()):
+            self.writer.add_text(key, str(val), 0)
+
     def __call__(self, kvpairs, nupdates):
 
         if self.first:
@@ -87,6 +98,10 @@ class TensorboardLogger:
 class ListLogger:
     def __init__(self, args=[]):
         self.loggers = args
+
+    def info(self, kvpairs):
+        for logger in self.loggers:
+            logger.info(kvpairs)
 
     def __call__(self, kvpairs, nupdates):
         for logger in self.loggers:

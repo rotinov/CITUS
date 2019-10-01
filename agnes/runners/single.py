@@ -4,6 +4,7 @@ from agnes.common import logger
 from torch import cuda
 import numpy
 import time
+import re
 
 
 class Single:
@@ -20,6 +21,9 @@ class Single:
         self.cnfg, self.env_type = algo.get_config(env_type)
         if config is not None:
             self.cnfg = config
+
+        self.timesteps = self.cnfg['timesteps']
+        self.nsteps = self.cnfg['nsteps']
 
         self.vec_num = vec_num
 
@@ -38,22 +42,28 @@ class Single:
 
     def log(self, *args):
         self.logger = logger.ListLogger(args)
+        self.logger.info({
+            "envs_num": self.vec_num,
+            "device": self.trainer.device_info(),
+            "env_type": self.env_type,
+            "algo": re.split("['.]", str(self.trainer.__class__))[3]
+        })
 
     def run(self, log_interval=1):
         print(self.trainer.device_info(), 'will be used.')
-        timesteps = self.cnfg['timesteps']
-        self.nsteps = self.cnfg['nsteps']
-        b_time = time.time()
+        nbatch = self.nsteps * self.env.num_envs
 
         lr_things = []
 
         self.state = self.env.reset()
 
-        run_times = int(numpy.ceil(timesteps / self.nsteps))
+        run_times = int(self.timesteps // self.nsteps)
         epinfobuf = deque(maxlen=100)
+        tfirststart = time.perf_counter()
 
-        for nupdates in range(run_times):
+        for nupdates in range(run_times+1):
             self.logger.stepping_environment()
+            tstart = time.perf_counter()
 
             data, epinfos = self._one_run()
 
@@ -64,14 +74,14 @@ class Single:
             
             self.worker.update(self.trainer)
 
-            if nupdates % log_interval == 0 or (lr_things and nupdates == run_times - 1):
-                actor_loss, critic_loss, entropy, approxkl, clipfrac, variance, debug = zip(*lr_things)
+            tnow = time.perf_counter()
 
-                time_now = time.time()
+            if nupdates % log_interval == 0:
+                actor_loss, critic_loss, entropy, approxkl, clipfrac, variance, debug = zip(*lr_things)
                 kvpairs = {
                     "eplenmean": logger.safemean(numpy.asarray([epinfo['l'] for epinfo in epinfobuf]).reshape(-1)),
                     "eprewmean": logger.safemean(numpy.asarray([epinfo['r'] for epinfo in epinfobuf]).reshape(-1)),
-                    "fps": self.nsteps*nupdates / max(1e-8, float(time_now - b_time)),
+                    "fps": int(nbatch / (tnow - tstart)),
                     "loss/approxkl": logger.safemean(approxkl),
                     "loss/clipfrac": logger.safemean(clipfrac),
                     "loss/policy_entropy": logger.safemean(entropy),
@@ -80,7 +90,7 @@ class Single:
                     "misc/explained_variance": logger.safemean(variance),
                     "misc/nupdates": nupdates,
                     "misc/serial_timesteps": self.nsteps*nupdates,
-                    "misc/time_elapsed": int(time_now - b_time),
+                    "misc/time_elapsed": (tnow - tfirststart),
                     "misc/total_timesteps": self.nsteps*nupdates
                 }
 
