@@ -2,6 +2,11 @@ import torch
 from abc import ABCMeta, abstractmethod
 
 
+torch.backends.cudnn.deterministic = False
+torch.backends.cudnn.benchmark = True
+torch.backends.cudnn.enabled = True
+
+
 class BaseBuffer(object):
     def append(self, transition):
         pass

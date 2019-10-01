@@ -8,10 +8,6 @@ from pprint import pprint
 from agnes.algos.configs.ppo_config import get_config
 
 
-torch.backends.cudnn.deterministic = False
-torch.backends.cudnn.benchmark = True
-
-
 class Buffer(base.BaseBuffer):
     def __init__(self):
         self.rollouts = []
@@ -38,14 +34,17 @@ class Buffer(base.BaseBuffer):
         return len(self.rollouts)
 
 
-class PPO(base.BaseAlgo):
+class PpoClass(base.BaseAlgo):
     _device = torch.device('cpu')
-    lossfun = torch.nn.MSELoss(reduction='none').to(_device)
 
     get_config = get_config
 
-    def __init__(self, nn, observation_space=gym.spaces.Discrete(5), action_space=gym.spaces.Discrete(5), cnfg=None,
-                 workers=1, trainer=True):
+    def __init__(self, nn,
+                 observation_space=gym.spaces.Discrete(5),
+                 action_space=gym.spaces.Discrete(5),
+                 cnfg=None,
+                 workers=1,
+                 trainer=True):
         super().__init__()
 
         self.nn_type = nn
@@ -112,40 +111,47 @@ class PPO(base.BaseAlgo):
         if data is None:
             return None
 
-        info = []
-
         # Unpack
-        states, actions, old_log_probs, old_vals, advs = zip(*data)
+        states, actions, old_log_probs, old_vals, returns = zip(*data)
 
-        # Tensors
-        if self._device == torch.device('cpu'):
-            t_states = torch.FloatTensor(states)
-            if self._nnet.type_of_out == torch.int16:
-                t_actions = torch.LongTensor(actions)
-            else:
-                t_actions = torch.FloatTensor(actions)
-            t_old_log_probs = torch.FloatTensor(old_log_probs)
-            t_state_old_vals = torch.FloatTensor(old_vals)
-            t_advs = torch.FloatTensor(advs)
-        else:
-            t_states = torch.cuda.FloatTensor(states)
-            if self._nnet.type_of_out == torch.int16:
-                t_actions = torch.cuda.LongTensor(actions)
-            else:
-                t_actions = torch.cuda.FloatTensor(actions)
-            t_old_log_probs = torch.cuda.FloatTensor(old_log_probs)
-            t_state_old_vals = torch.cuda.FloatTensor(old_vals)
-            t_advs = torch.cuda.FloatTensor(advs)
+        states = numpy.asarray(states)
+        actions = numpy.asarray(actions)
+        old_log_probs = numpy.asarray(old_log_probs)
+        old_vals = numpy.asarray(old_vals)
+        returns = numpy.asarray(returns)
 
-        indexes = [i for i in range(len(data))]
-
+        info = []
         for i in range(self.noptepochs):
-            random.shuffle(indexes)
-            ind_batches = self.buffer.learn(indexes, self.nbatch_train)
-            for ind_minibatch in ind_batches:
-                minibatch = (t_states[ind_minibatch], t_actions[ind_minibatch], t_old_log_probs[ind_minibatch],
-                             t_state_old_vals[ind_minibatch], t_advs[ind_minibatch])
-                info.append(self._one_train(minibatch))  # STATES, ACTIONS, OLDLOGPROBS, OLDVALS, RETURNS
+            indexes = numpy.random.permutation(len(data))
+
+            states = states.take(indexes, axis=0)
+            actions = actions.take(indexes, axis=0)
+            old_log_probs = old_log_probs.take(indexes, axis=0)
+            old_vals = old_vals.take(indexes, axis=0)
+            returns = returns.take(indexes, axis=0)
+
+            states_batches = numpy.split(states, self.nminibatches, axis=0)
+            actions_batchs = numpy.split(actions, self.nminibatches, axis=0)
+            old_log_probs_batchs = numpy.split(old_log_probs, self.nminibatches, axis=0)
+            old_vals_batchs = numpy.split(old_vals, self.nminibatches, axis=0)
+            returns_batchs = numpy.split(returns, self.nminibatches, axis=0)
+
+            for (
+                    states_batch,
+                    actions_batch,
+                    old_log_probs_batch,
+                    old_vals_batch,
+                    returns_batch
+            ) in zip(
+                states_batches,
+                actions_batchs,
+                old_log_probs_batchs,
+                old_vals_batchs,
+                returns_batchs
+            ):
+                info.append(
+                    self._one_train(states_batch, actions_batch, old_log_probs_batch, old_vals_batch, returns_batch)
+                )
 
         return info
 
@@ -171,7 +177,6 @@ class PPO(base.BaseAlgo):
         device = torch.device(device)
         self._device = device
         self._nnet = self._nnet.to(device)
-        self.lossfun = self.lossfun.to(device)
 
         return self
 
@@ -235,8 +240,31 @@ class PPO(base.BaseAlgo):
 
         return list(zip(*transitions))
 
-    def _one_train(self, DATA):
-        STATES, ACTIONS, OLDLOGPROBS, OLDVALS, RETURNS = DATA
+    def _one_train(self,
+                   STATES,
+                   ACTIONS,
+                   OLDLOGPROBS,
+                   OLDVALS,
+                   RETURNS):
+        # Tensors
+        if self._device == torch.device('cpu'):
+            STATES = torch.FloatTensor(STATES)
+            if self._nnet.type_of_out == torch.int16:
+                ACTIONS = torch.LongTensor(ACTIONS)
+            else:
+                ACTIONS = torch.FloatTensor(ACTIONS)
+            OLDLOGPROBS = torch.FloatTensor(OLDLOGPROBS)
+            OLDVALS = torch.FloatTensor(OLDVALS)
+            RETURNS = torch.FloatTensor(RETURNS)
+        else:
+            STATES = torch.cuda.FloatTensor(STATES)
+            if self._nnet.type_of_out == torch.int16:
+                ACTIONS = torch.cuda.LongTensor(ACTIONS)
+            else:
+                ACTIONS = torch.cuda.FloatTensor(ACTIONS)
+            OLDLOGPROBS = torch.cuda.FloatTensor(OLDLOGPROBS)
+            OLDVALS = torch.cuda.FloatTensor(OLDVALS)
+            RETURNS = torch.cuda.FloatTensor(RETURNS)
 
         # Feedforward with building computation graph
         t_distrib, t_state_vals_un = self._nnet(STATES)
@@ -297,7 +325,31 @@ class PPO(base.BaseAlgo):
                 t_entropy.item(),
                 approxkl,
                 clipfrac,
-                logger.explained_variance(t_state_vals.detach().cpu().numpy(),
-                                          RETURNS.detach().cpu().numpy()),
+                logger.explained_variance(t_state_vals.detach().cpu().numpy(), RETURNS.detach().cpu().numpy()),
                 ()
                 )
+
+
+class PpoInitializer:
+    def __init__(self):
+        pass
+
+    def __call__(self, nn,
+                 observation_space=gym.spaces.Discrete(5),
+                 action_space=gym.spaces.Discrete(5),
+                 cnfg=None,
+                 workers=1,
+                 trainer=True):
+        return PpoClass(nn,
+                        observation_space,
+                        action_space,
+                        cnfg,
+                        workers,
+                        trainer)
+
+    @staticmethod
+    def get_config(env_type):
+        return get_config(env_type)
+
+
+PPO = PpoInitializer()

@@ -1,9 +1,10 @@
 import re
+from typing import Dict, Tuple
 
 
-def atari_config():
+def atari_config() -> Dict:
     return dict(
-        timesteps=10e6,  # 5*128,  # 10e6,
+        timesteps=10e6,  # 10e6,  #  5*128,  #
         nsteps=128,
         nminibatches=4,
         gamma=0.99,
@@ -17,7 +18,7 @@ def atari_config():
     )
 
 
-def mujoco_config():
+def mujoco_config() -> Dict:
     return dict(
         timesteps=1e6,
         nsteps=2048,
@@ -33,7 +34,7 @@ def mujoco_config():
     )
 
 
-def classic_config():
+def classic_config() -> Dict:
     return dict(
         timesteps=30000,
         nsteps=128,
@@ -49,7 +50,7 @@ def classic_config():
     )
 
 
-def default_config():
+def default_config() -> Dict:
     return dict(
         timesteps=10e6,
         nsteps=128,
@@ -65,7 +66,7 @@ def default_config():
     )
 
 
-def get_config(env_type: str):
+def get_config(env_type: str) -> Tuple[Dict, str]:
     if env_type == 'classic_control':
         cnfg = classic_config()
     elif env_type == 'mujoco':
