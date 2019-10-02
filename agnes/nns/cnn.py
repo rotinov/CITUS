@@ -163,7 +163,7 @@ class CNNDiscreteCopy(nn.Module):
             x.unsqueeze_(0)
 
         dist, state_value = self.forward(x)
-        action = dist.sample()
+        action = torch.argmax(dist.probs, dim=-1)
 
         return (action.detach().cpu().numpy(),
                 action.detach().cpu().numpy(),
@@ -211,7 +211,7 @@ class CNNDiscreteShared(nn.Module):
             x.unsqueeze_(0)
 
         dist, state_value = self.forward(x)
-        action = dist.sample()
+        action = torch.argmax(dist.probs, dim=-1)
 
         return (action.detach().squeeze(-1).cpu().numpy(),
                 action.detach().squeeze(-1).cpu().numpy(),
