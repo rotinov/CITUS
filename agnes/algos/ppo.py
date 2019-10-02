@@ -234,6 +234,8 @@ class PpoClass(base.BaseAlgo):
             li_old_log_probs = numpy.asarray(old_log_probs)
             li_old_log_probs = li_old_log_probs.reshape((-1,) + li_old_log_probs.shape[2:])
 
+            # print(numpy.exp(li_old_log_probs.mean()))
+
             li_n_returns = n_returns.reshape((-1,) + n_returns.shape[2:])
 
             transitions = (li_states, li_actions, li_old_log_probs, li_old_vals, li_n_returns)
