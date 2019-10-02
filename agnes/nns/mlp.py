@@ -27,7 +27,7 @@ class MLPDiscrete(nn.Module):
 
     def __init__(self,
                  observation_space=spaces.Box(low=-10, high=10, shape=(1,)),
-                 action_space=spaces.Discrete(5), mlp_fun=mlp1l):
+                 action_space=spaces.Discrete(5), mlp_fun=mlp2l):
         super(MLPDiscrete, self).__init__()
         self.action_space = action_space
 
@@ -52,20 +52,9 @@ class MLPDiscrete(nn.Module):
         if x.ndimension() > 2:
             x = x.view(tuple(x.shape[:-self.obs_space_n]) + (self.obs_space,))
 
-        compressed = False
-        if x.ndimension() == 3:
-            compressed = True
-            f = x.shape[0]
-            s = x.shape[1]
-            x = x.view(f * s, x.shape[2])
-
         state_value = self.critic_head(x)
 
         probs = self.actor_head(x)
-
-        if compressed:
-            state_value = state_value.view(f, s)
-            probs = probs.view(f, s, -1)
 
         dist = Categorical(probs)
 
@@ -116,22 +105,11 @@ class MLPContinuous(nn.Module):
         if x.ndimension() > 2:
             x = x.view(tuple(x.shape[:-self.obs_space_n]) + (self.obs_space,))
 
-        compressed = False
-        if x.ndimension() == 3:
-            compressed = True
-            f = x.shape[0]
-            s = x.shape[1]
-            x = x.view(f * s, x.shape[2])
-
         state_value = self.critic_head(x)
 
         mu = self.actor_head(x)
 
-        if compressed:
-            state_value = state_value.view(f, s)
-            mu = mu.view(f, s, -1)
-        else:
-            state_value = state_value.view(-1)
+        state_value = state_value.view(-1)
 
         std = self.log_std.expand_as(mu).exp()
         dist = Normal(mu, std)

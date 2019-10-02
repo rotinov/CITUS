@@ -11,7 +11,8 @@ WORKDIR $CODE_DIR/AGNES
 # Clean up pycache and pyc files
 RUN rm -rf __pycache__ && \
     find . -name "*.pyc" -delete && \
-    pip install -r requirements.txt
+    pip install -r requirements.txt && \
+    pip install .
 
 
 CMD /bin/bash
