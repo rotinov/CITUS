@@ -76,7 +76,7 @@ def get_env_type(env: str):
 def wrap_vec_atari(env_name, envs_num=multiprocessing.cpu_count()):
     def make_env():
         def _thunk():
-            env = wrap_deepmind(Monitor(make_atari(env_name), allow_early_resets=True))
+            env = wrap_deepmind(Monitor(make_atari(env_name), allow_early_resets=False))
             return env
 
         return _thunk

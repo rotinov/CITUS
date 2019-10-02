@@ -292,22 +292,20 @@ class PpoClass(base.BaseAlgo):
         # Calculating ratio
         t_ratio = torch.exp(t_new_log_probs - OLDLOGPROBS)
 
-        approxkl = (.5 * torch.mean((OLDLOGPROBS - t_new_log_probs) ** 2)).item()
-        clipfrac = torch.mean((torch.abs(t_ratio - 1.0) > self.CLIPRANGE).float()).item()
+        with torch.no_grad():
+            approxkl = (.5 * torch.mean((OLDLOGPROBS - t_new_log_probs) ** 2)).item()
+            clipfrac = torch.mean((torch.abs(t_ratio - 1.0) > self.CLIPRANGE).float()).item()
 
         # Calculating surrogates
-        t_rt1 = torch.mul(ADVS, t_ratio)
-        t_rt2 = torch.mul(ADVS, torch.clamp(t_ratio, 1 - self.CLIPRANGE, 1 + self.CLIPRANGE))
-        t_actor_loss = torch.min(t_rt1, t_rt2).mean()
+        t_rt1 = - ADVS * t_ratio
+        t_rt2 = - ADVS * torch.clamp(t_ratio, 1 - self.CLIPRANGE, 1 + self.CLIPRANGE)
+        t_actor_loss = torch.max(t_rt1, t_rt2).mean()
 
         # Calculating entropy
         t_entropy = t_distrib.entropy().mean()
 
-        # Making surrogate loss
-        t_surrogate = t_actor_loss - self.vf_coef * t_critic_loss + self.ent_coef * t_entropy
-
-        # Making loss for Neural network
-        t_loss = - t_surrogate
+        # Making loss for Neural Network
+        t_loss = t_actor_loss + self.vf_coef * t_critic_loss - self.ent_coef * t_entropy
 
         # Calculating gradients
         self._optimizer.zero_grad()
@@ -320,7 +318,7 @@ class PpoClass(base.BaseAlgo):
         self._optimizer.step()
         self.lr_scheduler.step()
 
-        return (- t_actor_loss.item(),
+        return (t_actor_loss.item(),
                 t_critic_loss.item(),
                 t_entropy.item(),
                 approxkl,
