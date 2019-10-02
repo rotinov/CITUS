@@ -64,7 +64,7 @@ class MLPDiscrete(nn.Module):
         if x.ndimension() < 2:
             x.unsqueeze_(0)
         dist, state_value = self.forward(x)
-        action = dist.sample()
+        action = torch.argmax(dist.probs, dim=-1)
 
         return (action.detach().squeeze(-1).cpu().numpy(),
                 action.detach().squeeze(-1).cpu().numpy(),
