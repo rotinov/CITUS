@@ -12,6 +12,7 @@ WORKDIR $CODE_DIR/AGNES
 RUN rm -rf __pycache__ && \
     find . -name "*.pyc" -delete && \
     pip install -r requirements.txt && \
+    pip instal mpi4py && \
     pip install .
 
 
