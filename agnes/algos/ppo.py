@@ -279,7 +279,7 @@ class PpoClass(base.BaseAlgo):
         # Making critic losses
         t_state_vals_clipped = OLDVALS + torch.clamp(t_state_vals - OLDVALS,
                                                      - self.CLIPRANGE,
-                                                     self.CLIPRANGE)
+                                                     + self.CLIPRANGE)
 
         # Making critic final loss
         t_critic_loss1 = (t_state_vals - RETURNS).pow(2)
