@@ -2,7 +2,10 @@ from torch import nn
 
 
 def get_weights_init(activation='tanh'):
-    gain = nn.init.calculate_gain(activation)
+    if isinstance(activation, str):
+        gain = nn.init.calculate_gain(activation)
+    else:
+        gain = activation
 
     def weights_init(m):
         if isinstance(m, nn.Conv1d):

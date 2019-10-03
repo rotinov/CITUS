@@ -63,11 +63,23 @@ class CnnBody(nn.Module):
 
         test_input = torch.rand(input_shape).unsqueeze(0)
 
-        self.conv = nn.Sequential(nn.Conv2d(4, 32, 8, stride=4),
+        self.conv = nn.Sequential(nn.Conv2d(in_channels=4,
+                                            out_channels=32,
+                                            kernel_size=8,
+                                            stride=4,
+                                            padding=0),
                                   nn.ReLU(),
-                                  nn.Conv2d(32, 64, 4, stride=2),
+                                  nn.Conv2d(in_channels=32,
+                                            out_channels=64,
+                                            kernel_size=4,
+                                            stride=2,
+                                            padding=0),
                                   nn.ReLU(),
-                                  nn.Conv2d(64, 64, 3, stride=1),
+                                  nn.Conv2d(in_channels=64,
+                                            out_channels=64,
+                                            kernel_size=3,
+                                            stride=1,
+                                            padding=0),
                                   nn.ReLU())
 
         test_output = self.conv(test_input)
@@ -126,11 +138,9 @@ class CNNDiscreteCopy(nn.Module):
         # actor's layer
         if policy_fn is None:
             self.actor_head = nn.Sequential(CnnBody(input_shape=(4, 84, 84)),
-                                            CnnHead(action_space.n),
-                                            nn.Softmax(-1))
+                                            CnnHead(action_space.n))
         else:
-            self.actor_head = nn.Sequential(policy_fn(action_space.n),
-                                            nn.Softmax(-1))
+            self.actor_head = policy_fn(action_space.n)
 
         # critic's layer
         if value_fn is None:
@@ -139,7 +149,15 @@ class CNNDiscreteCopy(nn.Module):
         else:
             self.critic_head = value_fn(1)
 
-        self.apply(get_weights_init('relu'))
+        self.actor_head[0].apply(get_weights_init('relu'))
+
+        self.actor_head[1].apply(get_weights_init(numpy.sqrt(0.01)))
+
+        self.critic_head[0].apply(get_weights_init('relu'))
+
+        self.critic_head[1].apply(get_weights_init(numpy.sqrt(0.01)))
+
+        # self.apply(get_weights_init('relu'))
 
     @staticmethod
     def type_of_out():
@@ -154,7 +172,7 @@ class CNNDiscreteCopy(nn.Module):
 
         policy = self.actor_head(xt)
 
-        dist = Categorical(policy)
+        dist = Categorical(logits=policy)
 
         return dist, state_value
 
@@ -163,11 +181,14 @@ class CNNDiscreteCopy(nn.Module):
             x.unsqueeze_(0)
 
         dist, state_value = self.forward(x)
-        action = torch.argmax(dist.probs, dim=-1)
+
+        action = dist.sample()
+
+        log_prob = dist.log_prob(action)
 
         return (action.detach().cpu().numpy(),
                 action.detach().cpu().numpy(),
-                (dist.log_prob(action).detach().cpu().numpy(),
+                (log_prob.detach().cpu().numpy(),
                  state_value.detach().squeeze(-1).cpu().numpy()))
 
 
@@ -180,13 +201,18 @@ class CNNDiscreteShared(nn.Module):
         self.conv = CnnBody()
 
         # actor's layer
-        self.actor_head = nn.Sequential(CnnHead(action_space.n),
-                                        nn.Softmax(-1))
+        self.actor_head = CnnHead(action_space.n)
 
         # critic's layer
         self.critic_head = CnnHead(1)
 
-        self.apply(get_weights_init('relu'))
+        self.conv.apply(get_weights_init('relu'))
+
+        self.actor_head.apply(get_weights_init(numpy.sqrt(0.01)))
+
+        self.critic_head.apply(get_weights_init(numpy.sqrt(0.01)))
+
+        # self.apply(get_weights_init('relu'))
 
     @staticmethod
     def type_of_out():
@@ -202,7 +228,7 @@ class CNNDiscreteShared(nn.Module):
 
         policy = self.actor_head(both)
 
-        dist = Categorical(policy)
+        dist = Categorical(logits=policy)
 
         return dist, state_value
 
@@ -211,16 +237,19 @@ class CNNDiscreteShared(nn.Module):
             x.unsqueeze_(0)
 
         dist, state_value = self.forward(x)
-        action = torch.argmax(dist.probs, dim=-1)
 
-        return (action.detach().squeeze(-1).cpu().numpy(),
-                action.detach().squeeze(-1).cpu().numpy(),
-                (dist.log_prob(action).detach().squeeze(-1).cpu().numpy(),
+        action = dist.sample()
+
+        log_prob = dist.log_prob(action)
+
+        return (action.detach().cpu().numpy(),
+                action.detach().cpu().numpy(),
+                (log_prob.detach().cpu().numpy(),
                  state_value.detach().squeeze(-1).cpu().numpy()))
 
 
 class CNNChooser:
-    def __init__(self, shared=False, policy_nn=None, value_nn=None):
+    def __init__(self, shared=True, policy_nn=None, value_nn=None):
         if shared:
             if policy_nn is not None or value_nn is not None:
                 raise NameError('Shared network with custom layers is not supported for now.')
