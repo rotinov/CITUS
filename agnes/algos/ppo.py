@@ -67,7 +67,7 @@ class PpoClass(base.BaseAlgo):
         self.final_timestep = cnfg['timesteps']
         self.nsteps = cnfg['nsteps']
         self.nminibatches = cnfg['nminibatches']
-        self.lam = cnfg['lam']
+        self.LAM = cnfg['lam']
         self.noptepochs = cnfg['noptepochs']
         self.MAX_GRAD_NORM = cnfg['max_grad_norm']
         self.workers_num = workers
@@ -206,19 +206,16 @@ class PpoClass(base.BaseAlgo):
             n_state_vals = n_state_vals.reshape(n_shape)
 
         # Making GAE from td residual
-        n_advs = numpy.zeros_like(n_state_vals)
+        n_returns = numpy.zeros_like(n_state_vals)
         lastgaelam = 0
-        for t in reversed(range(n_advs.shape[0])):
-            if t == n_advs.shape[0] - 1:
-                nextvalues = last_values
-            else:
-                nextvalues = n_state_vals[t+1]
-
+        nextvalues = last_values
+        for t in reversed(range(n_returns.shape[0])):
             nextnonterminal = 1. - n_dones[t]
             delta = n_rewards[t] + self.GAMMA * nextnonterminal * nextvalues - n_state_vals[t]
-            n_advs[t] = lastgaelam = delta + self.lam * self.GAMMA * nextnonterminal * lastgaelam
+            n_returns[t] = lastgaelam = delta + self.LAM * self.GAMMA * nextnonterminal * lastgaelam
+            nextvalues = n_state_vals[t]
 
-        n_returns = n_advs + n_state_vals
+        n_returns += n_state_vals
 
         if n_rewards.ndim == 1:
             transitions = (numpy.asarray(states), numpy.asarray(actions),
@@ -233,8 +230,6 @@ class PpoClass(base.BaseAlgo):
 
             li_old_log_probs = numpy.asarray(old_log_probs)
             li_old_log_probs = li_old_log_probs.reshape((-1,) + li_old_log_probs.shape[2:])
-
-            # print(numpy.exp(li_old_log_probs.mean()))
 
             li_n_returns = n_returns.reshape((-1,) + n_returns.shape[2:])
 
@@ -251,7 +246,7 @@ class PpoClass(base.BaseAlgo):
         # Tensors
         if self._device == torch.device('cpu'):
             STATES = torch.FloatTensor(STATES)
-            if self._nnet.type_of_out == torch.int16:
+            if self._nnet.type_of_out() == torch.int16:
                 ACTIONS = torch.LongTensor(ACTIONS)
             else:
                 ACTIONS = torch.FloatTensor(ACTIONS)
@@ -260,7 +255,7 @@ class PpoClass(base.BaseAlgo):
             RETURNS = torch.FloatTensor(RETURNS)
         else:
             STATES = torch.cuda.FloatTensor(STATES)
-            if self._nnet.type_of_out == torch.int16:
+            if self._nnet.type_of_out() == torch.int16:
                 ACTIONS = torch.cuda.LongTensor(ACTIONS)
             else:
                 ACTIONS = torch.cuda.FloatTensor(ACTIONS)
@@ -273,10 +268,13 @@ class PpoClass(base.BaseAlgo):
         t_state_vals = t_state_vals_un.squeeze(-1)
 
         OLDVALS = OLDVALS.view_as(t_state_vals)
-        ADVANTAGES = RETURNS - t_state_vals.detach()
+        ADVANTAGES = RETURNS - OLDVALS
 
         # Normalizing advantages
-        ADVS = ((ADVANTAGES - ADVANTAGES.mean()) / (ADVANTAGES.std() + 1e-8)).unsqueeze(-1)
+        ADVS = ((ADVANTAGES - ADVANTAGES.mean()) / (ADVANTAGES.std() + 1e-8))
+
+        if OLDLOGPROBS.ndimension() != 1:
+            ADVS = ADVS.unsqueeze(-1)
 
         # Making critic losses
         t_state_vals_clipped = OLDVALS + torch.clamp(t_state_vals - OLDVALS,
@@ -299,9 +297,9 @@ class PpoClass(base.BaseAlgo):
             clipfrac = torch.mean((torch.abs(t_ratio - 1.0) > self.CLIPRANGE).float()).item()
 
         # Calculating surrogates
-        t_rt1 = - ADVS * t_ratio
-        t_rt2 = - ADVS * torch.clamp(t_ratio, 1 - self.CLIPRANGE, 1 + self.CLIPRANGE)
-        t_actor_loss = torch.max(t_rt1, t_rt2).mean()
+        t_rt1 = ADVS * t_ratio
+        t_rt2 = ADVS * torch.clamp(t_ratio, 1 - self.CLIPRANGE, 1 + self.CLIPRANGE)
+        t_actor_loss = - torch.min(t_rt1, t_rt2).mean()
 
         # Calculating entropy
         t_entropy = t_distrib.entropy().mean()
