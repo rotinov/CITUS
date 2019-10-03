@@ -2,7 +2,7 @@ import agnes
 import time
 
 
-env_name = "CartPole-v0"  # "InvertedDoublePendulum-v2"  # "Swimmer-v2"
+env_name = "InvertedDoublePendulum-v2"  # "InvertedDoublePendulum-v2"  # "Swimmer-v2"
 
 if __name__ == '__main__':
     envs = agnes.make_vec_env(env_name, envs_num=16)

@@ -36,8 +36,7 @@ class MLPDiscrete(nn.Module):
             self.obs_space *= item
 
         # actor's layer
-        self.actor_head = nn.Sequential(mlp_fun(self.obs_space, action_space.n),
-                                        nn.Softmax(-1))
+        self.actor_head = mlp_fun(self.obs_space, action_space.n)
 
         # critic's layer
         self.critic_head = mlp_fun(self.obs_space, 1)
@@ -56,7 +55,7 @@ class MLPDiscrete(nn.Module):
 
         probs = self.actor_head(x)
 
-        dist = Categorical(probs)
+        dist = Categorical(logits=probs)
 
         return dist, state_value
 
@@ -64,11 +63,14 @@ class MLPDiscrete(nn.Module):
         if x.ndimension() < 2:
             x.unsqueeze_(0)
         dist, state_value = self.forward(x)
-        action = torch.argmax(dist.probs, dim=-1)
+
+        action = dist.sample()
+
+        log_prob = dist.log_prob(action)
 
         return (action.detach().squeeze(-1).cpu().numpy(),
                 action.detach().squeeze(-1).cpu().numpy(),
-                (dist.log_prob(action).detach().squeeze(-1).cpu().numpy(),
+                (log_prob.detach().squeeze(-1).cpu().numpy(),
                  state_value.detach().squeeze(-1).cpu().numpy()))
 
 
