@@ -61,7 +61,7 @@ class Single:
         epinfobuf = deque(maxlen=100)
         tfirststart = time.perf_counter()
 
-        for nupdates in range(run_times+1):
+        for nupdates in range(1, run_times+1):
             self.logger.stepping_environment()
             tstart = time.perf_counter()
 

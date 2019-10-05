@@ -2,7 +2,7 @@ import agnes
 import time
 
 
-env_name = "BreakoutNoFrameskip-v4"
+env_name = "SeaquestNoFrameskip-v4"
 
 if __name__ == '__main__':
     envs = agnes.make_vec_env(env_name, envs_num=4)
