@@ -80,7 +80,7 @@ class PpoClass(base.BaseAlgo):
         if trainer:
             self._optimizer = torch.optim.Adam(self._nnet.parameters(), lr=self.learning_rate,
                                                betas=(0.99, 0.999),
-                                               eps=1e-3)
+                                               eps=1e-5)
 
             self.lr_scheduler = schedules.LinearAnnealingLR(self._optimizer, eta_min=0.0,  # 1e-6
                                                             to_epoch=final_epoch)
@@ -273,7 +273,7 @@ class PpoClass(base.BaseAlgo):
         # Normalizing advantages
         ADVS = ((ADVANTAGES - ADVANTAGES.mean()) / (ADVANTAGES.std() + 1e-8))
 
-        if OLDLOGPROBS.ndimension() != 1:
+        if OLDLOGPROBS.ndimension() == 2:
             ADVS = ADVS.unsqueeze(-1)
 
         # Making critic losses
@@ -298,7 +298,9 @@ class PpoClass(base.BaseAlgo):
 
         # Calculating surrogates
         t_rt1 = ADVS * t_ratio
-        t_rt2 = ADVS * torch.clamp(t_ratio, 1 - self.CLIPRANGE, 1 + self.CLIPRANGE)
+        t_rt2 = ADVS * torch.clamp(t_ratio,
+                                   1 - self.CLIPRANGE,
+                                   1 + self.CLIPRANGE)
         t_actor_loss = - torch.min(t_rt1, t_rt2).mean()
 
         # Calculating entropy

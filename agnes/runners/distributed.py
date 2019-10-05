@@ -107,6 +107,8 @@ class Distributed:
 
                 lr_things = []
 
+            self.logger.stepping_environment()
+
         MPI.Finalize()
 
         print("Training finished.")
