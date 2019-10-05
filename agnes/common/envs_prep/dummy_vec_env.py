@@ -1,6 +1,8 @@
 import numpy as np
 from .vec_env import VecEnv
 from .util import copy_obs_dict, dict_to_obs, obs_space_info
+from gym import spaces
+
 
 class DummyVecEnv(VecEnv):
     """
@@ -45,8 +47,8 @@ class DummyVecEnv(VecEnv):
     def step_wait(self):
         for e in range(self.num_envs):
             action = self.actions[e]
-            # if isinstance(self.envs[e].action_space, spaces.Discrete):
-            #    action = int(action)
+            if isinstance(self.envs[e].action_space, spaces.Box) and self.envs[e].action_space.shape[0] == 1:
+               action = np.expand_dims(action, axis=0)
 
             obs, self.buf_rews[e], self.buf_dones[e], self.buf_infos[e] = self.envs[e].step(action)
             if self.buf_dones[e]:

@@ -1,6 +1,8 @@
 import time
 from torch.utils.tensorboard import SummaryWriter
 import numpy
+import os
+import os.path as osp
 
 
 def safemean(xs):
@@ -90,6 +92,58 @@ class TensorboardLogger:
             self.writer.add_scalar(key, val, nupdates)
 
         # self.writer.flush()
+
+    def __del__(self):
+        pass
+
+
+class CsvLogger:
+    def __init__(self, filename):
+        if not osp.isdir(filename):
+            try:
+                os.makedirs(os.path.dirname(filename))
+            except OSError as exc:
+                if exc.errno != errno.EEXIST:
+                    raise
+
+        filename = osp.join(filename, 'progress.csv')
+
+        self.file = open(filename, 'w+t')
+        self.keys = []
+        self.sep = ','
+
+    def __call__(self, kvs, nupdates):
+        # Add our current row to the history
+        extra_keys = list(kvs.keys() - self.keys)
+        extra_keys.sort()
+        if extra_keys:
+            self.keys.extend(extra_keys)
+            self.file.seek(0)
+            lines = self.file.readlines()
+            self.file.seek(0)
+            for (i, k) in enumerate(self.keys):
+                if i > 0:
+                    self.file.write(',')
+                self.file.write(k)
+            self.file.write('\n')
+            for line in lines[1:]:
+                self.file.write(line[:-1])
+                self.file.write(self.sep * len(extra_keys))
+                self.file.write('\n')
+        for (i, k) in enumerate(self.keys):
+            if i > 0:
+                self.file.write(',')
+            v = kvs.get(k)
+            if v is not None:
+                self.file.write(str(v))
+        self.file.write('\n')
+        self.file.flush()
+
+    def close(self):
+        self.file.close()
+
+    def info(self, kvpairs):
+        pass
 
     def __del__(self):
         pass

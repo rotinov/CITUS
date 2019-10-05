@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torch.distributions import Categorical, Normal
 from agnes.common.init_weights import get_weights_init
+from agnes.nns.base import BasePolicy
 from gym import spaces
 import numpy
 import warnings
@@ -21,7 +22,7 @@ def mlp1l(x, y):
                          nn.Linear(128, y))
 
 
-class MLPDiscrete(nn.Module):
+class MLPDiscrete(nn.Module, BasePolicy):
     np_type = numpy.int16
     obs_space = 1
 
@@ -59,23 +60,8 @@ class MLPDiscrete(nn.Module):
 
         return dist, state_value
 
-    def get_action(self, x):
-        if x.ndimension() < 2:
-            x.unsqueeze_(0)
-        dist, state_value = self.forward(x)
 
-        action = dist.sample()
-
-        log_prob = dist.log_prob(action)
-
-        return (action.detach().squeeze(-1).cpu().numpy(),
-                action.detach().squeeze(-1).cpu().numpy(),
-                (log_prob.detach().squeeze(-1).cpu().numpy(),
-                 state_value.detach().squeeze(-1).cpu().numpy()))
-
-
-class MLPContinuous(nn.Module):
-    np_type = numpy.float32
+class MLPContinuous(nn.Module, BasePolicy):
     obs_space = 1
 
     def __init__(self,
@@ -109,26 +95,17 @@ class MLPContinuous(nn.Module):
 
         state_value = self.critic_head(x)
 
-        mu = self.actor_head(x)
+        mu = self.actor_head(x).squeeze(-1)
 
         state_value = state_value.view(-1)
 
         std = self.log_std.expand_as(mu).exp()
         dist = Normal(mu, std)
 
-        return dist, state_value.squeeze(0)
+        return dist, state_value.squeeze(-1)
 
     def get_action(self, x):
-        if x.ndimension() < 2:
-            x.unsqueeze_(0)
-        dist, state_value = self.forward(x)
-        smpled = dist.sample()
-        action = torch.clamp(smpled, self.action_space.low[0], self.action_space.high[0])
-
-        return (action.detach().cpu().numpy(),
-                smpled.detach().cpu().numpy(),
-                (dist.log_prob(smpled).detach().cpu().numpy(),
-                 state_value.detach().cpu().numpy()))
+        return self.get_action_n_apply(x, lambda z: torch.clamp(z, self.action_space.low[0], self.action_space.high[0]))
 
 
 def MLP(observation_space=spaces.Box(low=-10, high=10, shape=(1,)),
