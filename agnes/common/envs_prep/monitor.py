@@ -1,18 +1,26 @@
-import time
-
 from gym.core import Wrapper
+import time
+from glob import glob
+import csv
+import os.path as osp
+import json
+import os
 
 
 class Monitor(Wrapper):
     EXT = "monitor.csv"
     f = None
 
-    def __init__(self, env, allow_early_resets=False, reset_keywords=(), info_keywords=()):
+    def __init__(self, env, filename=None, allow_early_resets=False, rank=0, reset_keywords=(), info_keywords=()):
         Wrapper.__init__(self, env=env)
         self.tstart = time.time()
-
-        self.results_writer = None
-
+        if filename:
+            self.results_writer = ResultsWriter(filename, rank=rank,
+                header={"t_start": time.time(), 'env_id' : env.spec and env.spec.id},
+                extra_keys=reset_keywords + info_keywords
+            )
+        else:
+            self.results_writer = None
         self.reset_keywords = reset_keywords
         self.info_keywords = info_keywords
         self.allow_early_resets = allow_early_resets
@@ -22,14 +30,14 @@ class Monitor(Wrapper):
         self.episode_lengths = []
         self.episode_times = []
         self.total_steps = 0
-        self.current_reset_info = {}  # extra info about the current episode, that was passed in during reset()
+        self.current_reset_info = {} # extra info about the current episode, that was passed in during reset()
 
     def reset(self, **kwargs):
         self.reset_state()
         for k in self.reset_keywords:
             v = kwargs.get(k)
             if v is None:
-                raise ValueError('Expected you to pass kwarg %s into reset' % k)
+                raise ValueError('Expected you to pass kwarg %s into reset'%k)
             self.current_reset_info[k] = v
         return self.env.reset(**kwargs)
 
@@ -44,7 +52,7 @@ class Monitor(Wrapper):
             raise RuntimeError("Tried to step environment that needs reset")
         ob, rew, done, info = self.env.step(action)
         self.update(ob, rew, done, info)
-        return ob, rew, done, info
+        return (ob, rew, done, info)
 
     def update(self, ob, rew, done, info):
         self.rewards.append(rew)
@@ -59,6 +67,8 @@ class Monitor(Wrapper):
             self.episode_lengths.append(eplen)
             self.episode_times.append(time.time() - self.tstart)
             epinfo.update(self.current_reset_info)
+            if self.results_writer:
+                self.results_writer.write_row(epinfo)
             assert isinstance(info, dict)
             if isinstance(info, dict):
                 info['episode'] = epinfo
@@ -80,3 +90,81 @@ class Monitor(Wrapper):
 
     def get_episode_times(self):
         return self.episode_times
+
+
+class LoadMonitorResultsError(Exception):
+    pass
+
+
+class ResultsWriter(object):
+    def __init__(self, filename, rank=0, header='', extra_keys=()):
+        self.extra_keys = extra_keys
+        assert filename is not None
+        if not filename.endswith(Monitor.EXT):
+            if filename[-1] == '/':
+                if not osp.isdir(filename):
+                    try:
+                        os.makedirs(os.path.dirname(filename))
+                    except OSError as exc:
+                        if exc.errno != errno.EEXIST:
+                            raise
+
+                filename = osp.join(filename, str(rank) + '.' + Monitor.EXT)
+            else:
+                filename = filename + "." + Monitor.EXT
+        self.f = open(filename, "wt", newline='\n')
+        if isinstance(header, dict):
+            header = '# {} \n'.format(json.dumps(header))
+        self.f.write(header)
+        self.logger = csv.DictWriter(self.f, fieldnames=('r', 'l', 't')+tuple(extra_keys))
+        self.logger.writeheader()
+        self.f.flush()
+
+    def write_row(self, epinfo):
+        if self.logger:
+            self.logger.writerow(epinfo)
+            self.f.flush()
+
+
+def get_monitor_files(dir):
+    return glob(osp.join(dir, "*" + Monitor.EXT))
+
+
+def load_results(dir):
+    import pandas
+    monitor_files = (
+        glob(osp.join(dir, "*monitor.json")) +
+        glob(osp.join(dir, "*monitor.csv"))) # get both csv and (old) json files
+    if not monitor_files:
+        raise LoadMonitorResultsError("no monitor files of the form *%s found in %s" % (Monitor.EXT, dir))
+    dfs = []
+    headers = []
+    for fname in monitor_files:
+        with open(fname, 'rt') as fh:
+            if fname.endswith('csv'):
+                firstline = fh.readline()
+                if not firstline:
+                    continue
+                assert firstline[0] == '#'
+                header = json.loads(firstline[1:])
+                df = pandas.read_csv(fh, index_col=None)
+                headers.append(header)
+            elif fname.endswith('json'): # Deprecated json format
+                episodes = []
+                lines = fh.readlines()
+                header = json.loads(lines[0])
+                headers.append(header)
+                for line in lines[1:]:
+                    episode = json.loads(line)
+                    episodes.append(episode)
+                df = pandas.DataFrame(episodes)
+            else:
+                assert 0, 'unreachable'
+            df['t'] += header['t_start']
+        dfs.append(df)
+    df = pandas.concat(dfs)
+    df.sort_values('t', inplace=True)
+    df.reset_index(inplace=True)
+    df['t'] -= min(header['t_start'] for header in headers)
+    df.headers = headers # HACK to preserve backwards compatibility
+    return df

@@ -13,16 +13,20 @@ for env in gym.envs.registry.all():
     _game_envs[env_type].add(env.id)
 
 
-def make_vec_env(env, envs_num=multiprocessing.cpu_count()):
+def make_vec_env(env, envs_num=multiprocessing.cpu_count(), log_path=None):
+    if log_path:
+        if log_path[-1] != '/':
+            log_path = log_path + '/'
+
     if isinstance(env, str):
         env_type, env_id = get_env_type(env)
 
         if env_type == 'atari':
-            envs, num_envs = wrap_vec_atari(env_id, envs_num=envs_num)
+            envs, num_envs = wrap_vec_atari(env_id, envs_num=envs_num, log_path=log_path)
         else:
-            envs, num_envs = wrap_vec_gym(env_id, envs_num=envs_num)
+            envs, num_envs = wrap_vec_gym(env_id, envs_num=envs_num, log_path=log_path)
     else:
-        envs, num_envs = wrap_vec_custom(env, envs_num=envs_num)
+        envs, num_envs = wrap_vec_custom(env, envs_num=envs_num, log_path=log_path)
         env_type = 'custom'
 
     if env_type == 'mujoco':
@@ -31,16 +35,20 @@ def make_vec_env(env, envs_num=multiprocessing.cpu_count()):
     return envs, env_type, num_envs
 
 
-def make_env(env):
+def make_env(env, log_path=None):
+    if log_path:
+        if log_path[-1] != '/':
+            log_path = log_path + '/'
+
     if isinstance(env, str):
         env_type, env_id = get_env_type(env)
 
         if env_type == 'atari':
-            envs, num_envs = wrap_vec_atari(env_id, envs_num=1)
+            envs, num_envs = wrap_vec_atari(env_id, envs_num=1, log_path=log_path)
         else:
-            envs, num_envs = wrap_vec_gym(env_id, envs_num=1)
+            envs, num_envs = wrap_vec_gym(env_id, envs_num=1, log_path=log_path)
     else:
-        envs, num_envs = wrap_vec_custom(env, envs_num=1)
+        envs, num_envs = wrap_vec_custom(env, envs_num=1, log_path=log_path)
         env_type = 'custom'
 
     if env_type == 'mujoco':
@@ -73,15 +81,15 @@ def get_env_type(env: str):
     return env_type, env_id
 
 
-def wrap_vec_atari(env_name, envs_num=multiprocessing.cpu_count()):
-    def make_env():
+def wrap_vec_atari(env_name, envs_num=multiprocessing.cpu_count(), log_path=None):
+    def make_env(i):
         def _thunk():
-            env = wrap_deepmind(Monitor(make_atari(env_name), allow_early_resets=False))
+            env = wrap_deepmind(Monitor(make_atari(env_name), filename=log_path, rank=i, allow_early_resets=False))
             return env
 
         return _thunk
 
-    envs = [make_env() for _ in range(envs_num)]
+    envs = [make_env(i) for i in range(envs_num)]
 
     if envs_num == 1:
         envs = DummyVecEnv(envs)
@@ -93,14 +101,14 @@ def wrap_vec_atari(env_name, envs_num=multiprocessing.cpu_count()):
     return envs, envs_num
 
 
-def wrap_vec_gym(env_name, envs_num=multiprocessing.cpu_count()):
-    def make_env():
+def wrap_vec_gym(env_name, envs_num=multiprocessing.cpu_count(), log_path=None):
+    def make_env(i):
         def _thunk():
-            return Monitor(gym.make(env_name), allow_early_resets=True)
+            return Monitor(gym.make(env_name), filename=log_path, rank=i, allow_early_resets=True)
 
         return _thunk
 
-    envs = [make_env() for _ in range(envs_num)]
+    envs = [make_env(i) for i in range(envs_num)]
 
     if envs_num == 1:
         envs = DummyVecEnv(envs)
@@ -110,11 +118,11 @@ def wrap_vec_gym(env_name, envs_num=multiprocessing.cpu_count()):
     return envs, envs_num
 
 
-def wrap_vec_custom(env_init_fun, envs_num=multiprocessing.cpu_count()):
-    def make_env():
-        return Monitor(env_init_fun, allow_early_resets=True)
+def wrap_vec_custom(env_init_fun, envs_num=multiprocessing.cpu_count(), log_path=None):
+    def make_env(i):
+        return Monitor(env_init_fun, filename=log_path, rank=i, allow_early_resets=True)
 
-    envs = [make_env() for _ in range(envs_num)]
+    envs = [make_env(i) for i in range(envs_num)]
 
     if envs_num == 1:
         envs = DummyVecEnv(envs)

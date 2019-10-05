@@ -2,6 +2,7 @@ import multiprocessing as mp
 
 import numpy as np
 from .vec_env import VecEnv, CloudpickleWrapper, clear_mpi_env_vars
+from gym import spaces
 
 
 def worker(remote, parent_remote, env_fn_wrappers):
@@ -76,6 +77,9 @@ class SubprocVecEnv(VecEnv):
         self._assert_not_closed()
         actions = np.array_split(actions, self.nremotes)
         for remote, action in zip(self.remotes, actions):
+            if isinstance(self.action_space, spaces.Box) and self.action_space.shape[0] == 1:
+               action = np.expand_dims(action, axis=0)
+
             remote.send(('step', action))
         self.waiting = True
 
