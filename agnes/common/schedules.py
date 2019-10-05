@@ -20,14 +20,18 @@ class LinearAnnealingLR(_LRScheduler):
 class LinearSchedule:
     _step_count = 0
 
-    def __init__(self, eta_min=0.0, to_epoch=1000):
+    def __init__(self, val_fun, eta_min=0.0, to_epoch=1000):
         self.eta_min = eta_min
         self.to_epoch = to_epoch
+        self.val_fun = val_fun
 
     def step(self):
         self._step_count += 1
 
-    def get_k(self):
+    def get_v(self):
+        return self.val_fun(self._get_k())
+
+    def _get_k(self):
         return self.eta_min + max(0.,
                                   (1. - self.eta_min) * (1. - self._step_count / self.to_epoch)
                                   )

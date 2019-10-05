@@ -82,8 +82,13 @@ class PpoClass(base.BaseAlgo):
                                                betas=(0.99, 0.999),
                                                eps=1e-5)
 
-            self.lr_scheduler = schedules.LinearAnnealingLR(self._optimizer, eta_min=0.0,  # 1e-6
+            self.lr_scheduler = schedules.LinearAnnealingLR(self._optimizer, eta_min=0.0,
                                                             to_epoch=final_epoch)
+
+            if isinstance(self.CLIPRANGE, float):
+                self.cr_schedule = schedules.LinearSchedule(lambda x: self.CLIPRANGE * x, eta_min=1.0, to_epoch=final_epoch)
+            else:
+                self.cr_schedule = schedules.LinearSchedule(self.CLIPRANGE, eta_min=0.0, to_epoch=final_epoch)
 
         self.buffer = Buffer()
 
@@ -270,6 +275,8 @@ class PpoClass(base.BaseAlgo):
         OLDVALS = OLDVALS.view_as(t_state_vals)
         ADVANTAGES = RETURNS - OLDVALS
 
+        self.CLIPRANGE = self.cr_schedule.get_v()
+
         # Normalizing advantages
         ADVS = ((ADVANTAGES - ADVANTAGES.mean()) / (ADVANTAGES.std() + 1e-8))
 
@@ -319,6 +326,7 @@ class PpoClass(base.BaseAlgo):
         # Optimizer step
         self._optimizer.step()
         self.lr_scheduler.step()
+        self.cr_schedule.step()
 
         return (t_actor_loss.item(),
                 t_critic_loss.item(),
