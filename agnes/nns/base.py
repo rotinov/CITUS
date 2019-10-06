@@ -17,7 +17,7 @@ class BasePolicy:
     def forward(self, x):
         return None, None
 
-    def get_action(self, x):
+    def get_action(self, x, done):
         if x.ndimension() < len(self.action_space.shape) + 1:
             x.unsqueeze_(0)
 
@@ -32,7 +32,10 @@ class BasePolicy:
                 (log_prob.detach().squeeze(-1).cpu().numpy(),
                  state_value.detach().squeeze(-1).cpu().numpy()))
 
-    def get_action_n_apply(self, x, func):
+    def get_val(self, states):
+        return self.forward(states)[1]
+
+    def get_action_n_apply(self, x, done, func):
         if x.ndimension() < len(self.action_space.shape) + 1:
             x.unsqueeze_(0)
 

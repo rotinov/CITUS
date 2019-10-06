@@ -28,7 +28,7 @@ class BaseAlgo(metaclass=ABCMeta):
     def __init__(self, *args):
         pass
 
-    def __call__(self, state):
+    def __call__(self, state, done):
         pass
 
     def experience(self, transition):

@@ -6,20 +6,7 @@ from agnes.nns.base import BasePolicy
 from gym import spaces
 import numpy
 import warnings
-
-
-def mlp2l(x, y):
-    return nn.Sequential(nn.Linear(x, 64),
-                         nn.Tanh(),
-                         nn.Linear(64, 64),
-                         nn.Tanh(),
-                         nn.Linear(64, y))
-
-
-def mlp1l(x, y):
-    return nn.Sequential(nn.Linear(x, 128),
-                         nn.Tanh(),
-                         nn.Linear(128, y))
+from agnes.common.make_fc import make_fc
 
 
 class MLPDiscrete(nn.Module, BasePolicy):
@@ -28,7 +15,7 @@ class MLPDiscrete(nn.Module, BasePolicy):
 
     def __init__(self,
                  observation_space=spaces.Box(low=-10, high=10, shape=(1,)),
-                 action_space=spaces.Discrete(5), mlp_fun=mlp2l):
+                 action_space=spaces.Discrete(5), mlp_fun=make_fc):
         super(MLPDiscrete, self).__init__()
         self.action_space = action_space
 
@@ -37,10 +24,10 @@ class MLPDiscrete(nn.Module, BasePolicy):
             self.obs_space *= item
 
         # actor's layer
-        self.actor_head = mlp_fun(self.obs_space, action_space.n)
+        self.actor_head = make_fc(self.obs_space, action_space.n, num_layers=3, hidden_size=64)
 
         # critic's layer
-        self.critic_head = mlp_fun(self.obs_space, 1)
+        self.critic_head = make_fc(self.obs_space, 1, num_layers=3, hidden_size=64)
 
         self.apply(get_weights_init('tanh'))
 
@@ -67,7 +54,7 @@ class MLPContinuous(nn.Module, BasePolicy):
     def __init__(self,
                  observation_space=spaces.Box(low=-10, high=10, shape=(1,)),
                  action_space=spaces.Box(low=-10, high=10, shape=(1,)),
-                 logstd=0.0, mlp_fun=mlp2l):
+                 logstd=0.0, mlp_fun=make_fc):
         super(MLPContinuous, self).__init__()
         self.action_space = action_space
 
@@ -76,10 +63,10 @@ class MLPContinuous(nn.Module, BasePolicy):
             self.obs_space *= item
 
         # actor's layer
-        self.actor_head = mlp_fun(observation_space.shape[0], action_space.shape[0])
+        self.actor_head = make_fc(observation_space.shape[0], action_space.shape[0], num_layers=3, hidden_size=64)
 
         # critic's layer
-        self.critic_head = mlp_fun(observation_space.shape[0], 1)
+        self.critic_head = make_fc(observation_space.shape[0], 1, num_layers=3, hidden_size=64)
 
         self.log_std = nn.Parameter(torch.ones(action_space.shape[0]) * logstd)
 
@@ -104,8 +91,10 @@ class MLPContinuous(nn.Module, BasePolicy):
 
         return dist, state_value.squeeze(-1)
 
-    def get_action(self, x):
-        return self.get_action_n_apply(x, lambda z: torch.clamp(z, self.action_space.low[0], self.action_space.high[0]))
+    def get_action(self, *args):
+        return self.get_action_n_apply(*args,
+                                       lambda z: torch.clamp(z, self.action_space.low[0], self.action_space.high[0])
+                                       )
 
 
 def MLP(observation_space=spaces.Box(low=-10, high=10, shape=(1,)),
