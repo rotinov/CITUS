@@ -82,10 +82,15 @@ def get_env_type(env: str):
 
 
 def wrap_vec_atari(env_name, envs_num=multiprocessing.cpu_count(), config=None):
+    config_default = {"frame_stack": True,
+                      "path": None
+                      }
     if config is None:
-        config = {"frame_stack": True,
-                  "path": None
-                  }
+        config = config_default
+    safe_keys = set(config_default).difference(set(config))
+
+    for key in safe_keys:
+        config[key] = config_default[key]
 
     def make_env(i):
         def _thunk():

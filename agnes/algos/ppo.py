@@ -369,7 +369,7 @@ class PpoClass(base.BaseAlgo):
             OLDLOGPROBS = torch.FloatTensor(OLDLOGPROBS)
             OLDVALS = torch.FloatTensor(OLDVALS)
             RETURNS = torch.FloatTensor(RETURNS)
-            ADDITIONS = torch.FloatTensor(ADDITIONS)
+            ADDITIONS = torch.FloatTensor(ADDITIONS[0]).requires_grad_()
             DONES = torch.FloatTensor(DONES)
         else:
             STATES = torch.cuda.FloatTensor(STATES)
@@ -380,19 +380,20 @@ class PpoClass(base.BaseAlgo):
             OLDLOGPROBS = torch.cuda.FloatTensor(OLDLOGPROBS)
             OLDVALS = torch.cuda.FloatTensor(OLDVALS)
             RETURNS = torch.cuda.FloatTensor(RETURNS)
-            ADDITIONS = torch.cuda.FloatTensor(ADDITIONS)
+            ADDITIONS = torch.cuda.FloatTensor(ADDITIONS[0]).requires_grad_()
             DONES = torch.cuda.FloatTensor(DONES)
 
         # Feedforward with building computation graph
         l_new_log_probs = []
         l_state_vals = []
-        t_addition = ADDITIONS[0]
+        t_addition = ADDITIONS
+
         for t_state, t_done, t_action in zip(STATES, DONES, ACTIONS):
             t_distrib, t_addition, t_state_vals_un = self._nnet(t_state, t_addition)
             if t_done.ndimension() < 2:
                 t_done = t_done.unsqueeze(-1)
 
-            t_addition = t_done * t_addition
+            t_addition = (1. - t_done) * t_addition
 
             l_state_vals.append(t_state_vals_un.squeeze(-1))
             l_new_log_probs.append(t_distrib.log_prob(t_action).squeeze(-1))

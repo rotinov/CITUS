@@ -7,12 +7,12 @@ def test_config():
         nsteps=128,
         nminibatches=4,
         gamma=1.0,
-        lam=0.95,
+        lam=1.0,
         noptepochs=4,
-        max_grad_norm=0.5,
+        max_grad_norm=40,
         learning_rate=2.5e-4,
         cliprange=0.1,
-        vf_coef=0.5,
+        vf_coef=1.0,
         ent_coef=.01
     )
 
