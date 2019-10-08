@@ -1,3 +1,4 @@
+from abc import ABC
 import torch
 import torch.nn as nn
 from torch.distributions import Categorical, Normal
@@ -6,48 +7,20 @@ from agnes.nns.base import BasePolicy
 from gym import spaces
 import numpy
 import warnings
+from agnes.common.make_nn import make_fc
 
 
-def mlp2l(x, y):
-    return nn.Sequential(nn.Linear(x, 64),
-                         nn.Tanh(),
-                         nn.Linear(64, 64),
-                         nn.Tanh(),
-                         nn.Linear(64, y))
+class MlpFamily(BasePolicy, ABC):
+    def __init__(self, observation_space: spaces.Space, action_space: spaces.Space):
+        super().__init__(observation_space, action_space)
 
-
-def mlp1l(x, y):
-    return nn.Sequential(nn.Linear(x, 128),
-                         nn.Tanh(),
-                         nn.Linear(128, y))
-
-
-class MLPDiscrete(nn.Module, BasePolicy):
-    np_type = numpy.int16
-    obs_space = 1
-
-    def __init__(self,
-                 observation_space=spaces.Box(low=-10, high=10, shape=(1,)),
-                 action_space=spaces.Discrete(5), mlp_fun=mlp2l):
-        super(MLPDiscrete, self).__init__()
-        self.action_space = action_space
-
-        self.obs_space_n = len(observation_space.shape)
-        for item in observation_space.shape:
-            self.obs_space *= item
-
-        # actor's layer
-        self.actor_head = mlp_fun(self.obs_space, action_space.n)
-
-        # critic's layer
-        self.critic_head = mlp_fun(self.obs_space, 1)
+        self.actor_head = make_fc(self.obs_space, self.actions_n, num_layers=3, hidden_size=64)
+        self.critic_head = make_fc(self.obs_space, 1, num_layers=3, hidden_size=64)
 
         self.apply(get_weights_init('tanh'))
 
-    @staticmethod
-    def type_of_out():
-        return torch.int16
 
+class MLPDiscrete(MlpFamily):
     def forward(self, x):
         if x.ndimension() > 2:
             x = x.view(tuple(x.shape[:-self.obs_space_n]) + (self.obs_space,))
@@ -61,33 +34,11 @@ class MLPDiscrete(nn.Module, BasePolicy):
         return dist, state_value
 
 
-class MLPContinuous(nn.Module, BasePolicy):
-    obs_space = 1
-
-    def __init__(self,
-                 observation_space=spaces.Box(low=-10, high=10, shape=(1,)),
-                 action_space=spaces.Box(low=-10, high=10, shape=(1,)),
-                 logstd=0.0, mlp_fun=mlp2l):
-        super(MLPContinuous, self).__init__()
-        self.action_space = action_space
-
-        self.obs_space_n = len(observation_space.shape)
-        for item in observation_space.shape:
-            self.obs_space *= item
-
-        # actor's layer
-        self.actor_head = mlp_fun(observation_space.shape[0], action_space.shape[0])
-
-        # critic's layer
-        self.critic_head = mlp_fun(observation_space.shape[0], 1)
-
-        self.log_std = nn.Parameter(torch.ones(action_space.shape[0]) * logstd)
-
-        self.apply(get_weights_init('tanh'))
-
-    @staticmethod
-    def type_of_out():
-        return torch.float32
+class MLPContinuous(MlpFamily):
+    def __init__(self, observation_space: spaces.Space, action_space: spaces.Space):
+        super().__init__(observation_space, action_space)
+        logstd = 0.0
+        self.log_std = nn.Parameter(torch.ones(self.actions_n) * logstd)
 
     def forward(self, x):
         if x.ndimension() > 2:
@@ -104,17 +55,12 @@ class MLPContinuous(nn.Module, BasePolicy):
 
         return dist, state_value.squeeze(-1)
 
-    def get_action(self, x):
-        return self.get_action_n_apply(x, lambda z: torch.clamp(z, self.action_space.low[0], self.action_space.high[0]))
 
-
-def MLP(observation_space=spaces.Box(low=-10, high=10, shape=(1,)),
-        action_space=spaces.Discrete(5),
-        logstd=0.0):
+def MLP(observation_space: spaces.Space, action_space: spaces.Space):
     if len(observation_space.shape) == 3:
         warnings.warn("Looks like you're using MLP for images. CNN is recommended.")
 
     if isinstance(action_space, spaces.Box):
-        return MLPContinuous(observation_space, action_space, logstd)
+        return MLPContinuous(observation_space, action_space)
     else:
         return MLPDiscrete(observation_space, action_space)

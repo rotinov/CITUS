@@ -13,20 +13,20 @@ for env in gym.envs.registry.all():
     _game_envs[env_type].add(env.id)
 
 
-def make_vec_env(env, envs_num=multiprocessing.cpu_count(), log_path=None):
-    if log_path:
-        if log_path[-1] != '/':
-            log_path = log_path + '/'
+def make_vec_env(env, envs_num=multiprocessing.cpu_count(), config: dict = None):
+    if config is not None and "path" in config:
+        if config["path"][-1] != '/':
+            config["path"] = config["path"] + '/'
 
     if isinstance(env, str):
         env_type, env_id = get_env_type(env)
 
         if env_type == 'atari':
-            envs, num_envs = wrap_vec_atari(env_id, envs_num=envs_num, log_path=log_path)
+            envs, num_envs = wrap_vec_atari(env_id, envs_num=envs_num, config=config)
         else:
-            envs, num_envs = wrap_vec_gym(env_id, envs_num=envs_num, log_path=log_path)
+            envs, num_envs = wrap_vec_gym(env_id, envs_num=envs_num, config=config)
     else:
-        envs, num_envs = wrap_vec_custom(env, envs_num=envs_num, log_path=log_path)
+        envs, num_envs = wrap_vec_custom(env, envs_num=envs_num, config=config)
         env_type = 'custom'
 
     if env_type == 'mujoco':
@@ -35,20 +35,20 @@ def make_vec_env(env, envs_num=multiprocessing.cpu_count(), log_path=None):
     return envs, env_type, num_envs
 
 
-def make_env(env, log_path=None):
-    if log_path:
-        if log_path[-1] != '/':
-            log_path = log_path + '/'
+def make_env(env, config: dict = None):
+    if config is not None and "path" in config:
+        if config["path"][-1] != '/':
+            config["path"] = config["path"] + '/'
 
     if isinstance(env, str):
         env_type, env_id = get_env_type(env)
 
         if env_type == 'atari':
-            envs, num_envs = wrap_vec_atari(env_id, envs_num=1, log_path=log_path)
+            envs, num_envs = wrap_vec_atari(env_id, envs_num=1, config=config)
         else:
-            envs, num_envs = wrap_vec_gym(env_id, envs_num=1, log_path=log_path)
+            envs, num_envs = wrap_vec_gym(env_id, envs_num=1, config=config)
     else:
-        envs, num_envs = wrap_vec_custom(env, envs_num=1, log_path=log_path)
+        envs, num_envs = wrap_vec_custom(env, envs_num=1, config=config)
         env_type = 'custom'
 
     if env_type == 'mujoco':
@@ -81,10 +81,20 @@ def get_env_type(env: str):
     return env_type, env_id
 
 
-def wrap_vec_atari(env_name, envs_num=multiprocessing.cpu_count(), log_path=None):
+def wrap_vec_atari(env_name, envs_num=multiprocessing.cpu_count(), config=None):
+    config_default = {"frame_stack": True,
+                      "path": None
+                      }
+    if config is None:
+        config = config_default
+    safe_keys = set(config_default).difference(set(config))
+
+    for key in safe_keys:
+        config[key] = config_default[key]
+
     def make_env(i):
         def _thunk():
-            env = wrap_deepmind(Monitor(make_atari(env_name), filename=log_path, rank=i, allow_early_resets=False))
+            env = wrap_deepmind(Monitor(make_atari(env_name), filename=config["path"], rank=i, allow_early_resets=False))
             return env
 
         return _thunk
@@ -96,15 +106,19 @@ def wrap_vec_atari(env_name, envs_num=multiprocessing.cpu_count(), log_path=None
     else:
         envs = SubprocVecEnv(envs)
 
-    envs = VecFrameStack(envs, nstack=4)
+    if config["frame_stack"]:
+        envs = VecFrameStack(envs, nstack=4)
 
     return envs, envs_num
 
 
-def wrap_vec_gym(env_name, envs_num=multiprocessing.cpu_count(), log_path=None):
+def wrap_vec_gym(env_name, envs_num=multiprocessing.cpu_count(), config=None):
+    if config is None:
+        config = {"path": None}
+
     def make_env(i):
         def _thunk():
-            return Monitor(gym.make(env_name), filename=log_path, rank=i, allow_early_resets=True)
+            return Monitor(gym.make(env_name), filename=config["path"], rank=i, allow_early_resets=True)
 
         return _thunk
 
@@ -118,9 +132,12 @@ def wrap_vec_gym(env_name, envs_num=multiprocessing.cpu_count(), log_path=None):
     return envs, envs_num
 
 
-def wrap_vec_custom(env_init_fun, envs_num=multiprocessing.cpu_count(), log_path=None):
+def wrap_vec_custom(env_init_fun, envs_num=multiprocessing.cpu_count(), config=None):
+    if config is None:
+        config = {"path": None}
+
     def make_env(i):
-        return Monitor(env_init_fun, filename=log_path, rank=i, allow_early_resets=True)
+        return Monitor(env_init_fun, filename=config["path"], rank=i, allow_early_resets=True)
 
     envs = [make_env(i) for i in range(envs_num)]
 

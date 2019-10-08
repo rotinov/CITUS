@@ -7,6 +7,8 @@ def get_weights_init(activation='tanh'):
     else:
         gain = activation
 
+    recurrent_gain = nn.init.calculate_gain('tanh')
+
     def weights_init(m):
         if isinstance(m, nn.Conv1d):
             nn.init.normal_(m.weight.data)
@@ -50,26 +52,29 @@ def get_weights_init(activation='tanh'):
         elif isinstance(m, nn.LSTM):
             for param in m.parameters():
                 if len(param.shape) >= 2:
-                    nn.init.orthogonal_(param.data)
+                    nn.init.orthogonal_(param.data, recurrent_gain)
                 else:
                     nn.init.normal_(param.data)
         elif isinstance(m, nn.LSTMCell):
             for param in m.parameters():
                 if len(param.shape) >= 2:
-                    nn.init.orthogonal_(param.data)
+                    nn.init.orthogonal_(param.data, recurrent_gain)
                 else:
-                    nn.init.normal_(param.data)
+                    # nn.init.normal_(param.data)
+                    nn.init.zeros_(m.bias.data)
         elif isinstance(m, nn.GRU):
             for param in m.parameters():
                 if len(param.shape) >= 2:
-                    nn.init.orthogonal_(param.data)
+                    nn.init.orthogonal_(param.data, recurrent_gain)
                 else:
-                    nn.init.normal_(param.data)
+                    # nn.init.normal_(param.data)
+                    nn.init.zeros_(m.bias.data)
         elif isinstance(m, nn.GRUCell):
             for param in m.parameters():
                 if len(param.shape) >= 2:
-                    nn.init.orthogonal_(param.data)
+                    nn.init.orthogonal_(param.data, recurrent_gain)
                 else:
-                    nn.init.normal_(param.data)
+                    nn.init.zeros_(m.bias.data)
+                    # nn.init.normal_(param.data)
 
     return weights_init

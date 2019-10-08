@@ -4,10 +4,16 @@
 
 [![Build status](https://travis-ci.org/rotinov/AGNES.svg?branch=master)](https://travis-ci.org/rotinov/AGNES)
 
+## Results
+[![Peaking at 5362 at the end. The ending average is 5278.](results/MuJoCo-Ant-v2-PPO-1M/reward_per_update.svg?raw=true&sanitize=true)](results/MuJoCo-Ant-v2-PPO-1M)
+*MuJoCo "Ant-v2" training with 1M steps. "Single" runner with "PPO" algorithm, MLP NN and 32 number of envs.*
+
+*You can get the Tensorboard log file by clicking the image below(You will be redirected to the destination GitHub folder). The default config for the MuJoCo environment was used.*
+
 ## Runners
 * Single
 
-One worker that is also a trainer. 'agnes.make_vec_env' can be used here.
+One worker and trainer. 'agnes.make_vec_env' can be used here.
 
 ```python
 import agnes
@@ -78,5 +84,14 @@ Can be used only with Discrete action spaces.
 ```python
 ...
 runner = agnes.Single(env, agnes.PPO, agnes.CNN)
+...
+```
+
+* Recurrent Neural Network
+
+Can be used only with Discrete action spaces.
+```python
+...
+runner = agnes.Single(env, agnes.PPO, agnes.RNN)
 ...
 ```
