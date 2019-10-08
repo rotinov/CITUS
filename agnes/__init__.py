@@ -1,6 +1,6 @@
 from agnes.algos import PPO
 
-from agnes.nns import MLP, CNN
+from agnes.nns import MLP, CNN, RNN, RNNCNN
 
 from agnes.runners import Single, Distributed
 

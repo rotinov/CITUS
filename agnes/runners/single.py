@@ -56,6 +56,7 @@ class Single:
         lr_things = []
 
         self.state = self.env.reset()
+        self.done = numpy.zeros(self.env.num_envs, dtype=numpy.bool)
 
         run_times = int(self.timesteps // self.nsteps)
         epinfobuf = deque(maxlen=100)
@@ -103,8 +104,9 @@ class Single:
         data = None
         epinfos = []
         for step in range(self.nsteps):
-            action, pred_action, out = self.worker(self.state)
+            action, pred_action, out = self.worker(self.state, self.done)
             nstate, reward, done, infos = self.env.step(action)
+            self.done = done
             for info in infos:
                 maybeepinfo = info.get('episode')
                 if maybeepinfo:

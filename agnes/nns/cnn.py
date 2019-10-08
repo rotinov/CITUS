@@ -1,3 +1,4 @@
+from abc import ABC
 import torch
 import torch.nn as nn
 from torch.distributions import Categorical, Normal
@@ -5,157 +6,24 @@ from agnes.common.init_weights import get_weights_init
 from gym import spaces
 import numpy
 from agnes.nns.base import BasePolicy
+from agnes.common.make_nn import Cnn, CnnBody, CnnHead
 
 
-class ImagePreprocess(nn.Module):
-    def __init__(self, normalize=True, swap_axis=True):
-        super(ImagePreprocess, self).__init__()
-
-        self.normalize = normalize
-        self.swap_axis = swap_axis
-
-    def forward(self, x):
-        if self.normalize:
-            x = x / 255.
-
-        if self.swap_axis:
-            x = x.permute(0, 3, 1, 2)
-
-        return x
+class CnnFamily(BasePolicy, ABC):
+    pass
 
 
-class CnnSmallBody(nn.Module):
-    def __init__(self):
-        super(CnnSmallBody, self).__init__()
+class CNNDiscreteCopy(CnnFamily):
+    def __init__(self, observation_space, action_space: spaces.Space, policy_fn=None, value_fn=None):
+        super(CNNDiscreteCopy, self).__init__(observation_space, action_space)
 
-        self.conv = nn.Sequential(ImagePreprocess(),
-                                  nn.Conv2d(4, 8, 8, stride=4),
-                                  nn.ReLU(),
-                                  nn.Conv2d(8, 16, 4, stride=2),
-                                  nn.ReLU())
-
-    def forward(self, x):
-        # (4, 84, 84)
-        cv = self.conv(x)
-        # (16, 9, 9)
-
-        return cv
-
-
-class CnnSmallHead(nn.Module):
-    cnn_out_size = 16 * 9 * 9
-
-    def __init__(self, output):
-        super(CnnSmallHead, self).__init__()
-
-        self.fc = nn.Sequential(nn.Linear(self.cnn_out_size, 128),
-                                nn.ReLU(),
-                                nn.Linear(128, output))
-
-    def forward(self, cv):
-        cv_f = cv.view(-1, self.cnn_out_size)
-
-        return self.fc(cv_f)
-
-
-class CnnSmall(nn.Module):
-    def __init__(self, output):
-        super(CnnSmall, self).__init__()
-
-        self.conv = CnnSmallBody()
-
-        self.head = CnnSmallHead(output)
-
-    def forward(self, x):
-        # (4, 84, 84)
-        cv = self.conv(x)
-        # (16, 9, 9)
-
-        return self.head(cv)
-
-
-class CnnBody(nn.Module):
-    def __init__(self, input_shape=(4, 84, 84)):
-        super(CnnBody, self).__init__()
-
-        test_input = torch.rand(input_shape).unsqueeze(0)
-
-        self.conv = nn.Sequential(ImagePreprocess(),
-                                  nn.Conv2d(in_channels=4,
-                                            out_channels=32,
-                                            kernel_size=8,
-                                            stride=4,
-                                            padding=0),
-                                  nn.ReLU(),
-                                  nn.Conv2d(in_channels=32,
-                                            out_channels=64,
-                                            kernel_size=4,
-                                            stride=2,
-                                            padding=0),
-                                  nn.ReLU(),
-                                  nn.Conv2d(in_channels=64,
-                                            out_channels=64,
-                                            kernel_size=3,
-                                            stride=1,
-                                            padding=0),
-                                  nn.ReLU())
-
-        test_output = self.conv(test_input)
-        self.test_output_shape = tuple(test_output.shape)
-
-    @property
-    def output_size(self):
-        return self.test_output_shape
-
-    def forward(self, x):
-        # (4, 84, 84)
-        cv = self.conv(x)
-        # (64, 7, 7)
-
-        return cv
-
-
-class CnnHead(nn.Module):
-    def __init__(self, cnn_out_size, output):
-        super(CnnHead, self).__init__()
-
-        self.cnn_out_size = int(numpy.prod(cnn_out_size))
-
-        self.fc = nn.Sequential(nn.Linear(self.cnn_out_size, 512),
-                                nn.ReLU(),
-                                nn.Linear(512, output))
-
-    def forward(self, cv):
-        cv_f = cv.view(-1, self.cnn_out_size)
-
-        return self.fc(cv_f)
-
-
-class Cnn(nn.Module):
-    def __init__(self, input_shape, output):
-        super(Cnn, self).__init__()
-
-        self.conv = CnnBody(input_shape=input_shape)
-
-        self.head = CnnHead(self.conv.output_size, output)
-
-    def forward(self, x):
-        # (4, 84, 84) -> (64, 7, 7)
-        cv = self.conv(x)
-
-        return self.head(cv)
-
-
-class CNNDiscreteCopy(nn.Module, BasePolicy):
-    def __init__(self, input_shape, action_space=spaces.Discrete(5), policy_fn=None, value_fn=None):
-        super(CNNDiscreteCopy, self).__init__()
-        self.action_space = action_space
+        input_shape = observation_space.shape
 
         # actor's layer
         if policy_fn is None:
-            self.actor_head = Cnn(input_shape, action_space.n)
+            self.actor_head = Cnn(input_shape, self.actions_n)
         else:
-            self.actor_head = policy_fn(action_space.n)
+            self.actor_head = policy_fn(self.actions_n)
 
         # critic's layer
         if value_fn is None:
@@ -171,13 +39,6 @@ class CNNDiscreteCopy(nn.Module, BasePolicy):
 
         self.critic_head.head.apply(get_weights_init(numpy.sqrt(0.01)))
 
-        # self.apply(get_weights_init('relu'))
-
-    @staticmethod
-    def type_of_out():
-        return torch.int16
-
-    # noinspection PyUnboundLocalVariable
     def forward(self, x):
         state_value = self.critic_head(x)
 
@@ -188,15 +49,15 @@ class CNNDiscreteCopy(nn.Module, BasePolicy):
         return dist, state_value
 
 
-class CNNDiscreteShared(nn.Module, BasePolicy):
-    def __init__(self, input_shape, action_space=spaces.Discrete(5)):
-        super(CNNDiscreteShared, self).__init__()
-        self.action_space = action_space
+class CNNDiscreteShared(CnnFamily):
+    def __init__(self, observation_space, action_space: spaces.Space):
+        super(CNNDiscreteShared, self).__init__(observation_space, action_space)
+        input_shape = observation_space.shape
 
         self.conv = CnnBody(input_shape=input_shape)
 
         # actor's layer
-        self.actor_head = CnnHead(self.conv.output_size, action_space.n)
+        self.actor_head = CnnHead(self.conv.output_size, self.actions_n)
 
         # critic's layer
         self.critic_head = CnnHead(self.conv.output_size, 1)
@@ -207,10 +68,6 @@ class CNNDiscreteShared(nn.Module, BasePolicy):
         self.critic_head.apply(get_weights_init(numpy.sqrt(0.01)))
 
         self.apply(get_weights_init('relu'))
-
-    @staticmethod
-    def type_of_out():
-        return torch.int16
 
     def forward(self, x):
         both = self.conv(x)
@@ -240,12 +97,10 @@ class CNNChooser:
         if isinstance(action_space, spaces.Box):
             raise NameError('Continuous environments are not supported yet.')
 
-        input_shape = observation_space.shape
-
         if self.nn == CNNDiscreteShared:
-            return self.nn(input_shape, action_space)
+            return self.nn(observation_space, action_space)
         else:
-            return self.nn(input_shape, action_space, self.policy_nn, self.value_nn)
+            return self.nn(observation_space, action_space, self.policy_nn, self.value_nn)
 
 
 CNN = CNNChooser()

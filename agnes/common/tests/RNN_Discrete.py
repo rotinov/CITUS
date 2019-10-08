@@ -1,5 +1,4 @@
 import agnes
-import time
 
 
 def test_config():
@@ -12,18 +11,15 @@ def test_config():
         noptepochs=4,
         max_grad_norm=40,
         learning_rate=2.5e-4,
-        cliprange=lambda x: 0.2*x,
+        cliprange=0.1,
         vf_coef=1.0,
         ent_coef=.01
     )
 
 
-env_name = "CartPole-v1"
+def test_single():
+    env = agnes.make_env('CartPole-v0')
 
-
-if __name__ == '__main__':
-    envs = agnes.make_vec_env(env_name, envs_num=32)
-
-    runner = agnes.Single(envs, agnes.PPO, agnes.RNN, config=test_config())
+    runner = agnes.Single(env, agnes.PPO, agnes.RNN, config=test_config())
     runner.log(agnes.log)
     runner.run()
