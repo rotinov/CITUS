@@ -23,3 +23,5 @@ def test_single():
     runner = agnes.Single(env, agnes.PPO, agnes.MLP, config=test_config())
     runner.log(agnes.log)
     runner.run()
+    runner.worker.save("Test.pth")
+    runner.worker.load("Test.pth")

@@ -12,8 +12,8 @@ class Distributed:
     logger = logger.ListLogger()
 
     def __init__(self, env,
-                 algo: agnes.algos.base.BaseAlgo.__class__ = agnes.PPO,
-                 nn=agnes.MLP, config=None):
+                 algo: agnes.algos.base.BaseAlgo.__class__,
+                 nn, config=None):
         env, env_type, vec_num = env
         self.env = env
 
@@ -59,38 +59,39 @@ class Distributed:
         print(self.trainer.device_info(), 'will be used.')
         lr_things = []
 
-        b_time = time.time()
+        tfirststart = time.perf_counter()
+        nbatch = self.nsteps * self.env.num_envs * self.workers_num
+        epinfobuf = deque(maxlen=100 * self.workers_num * log_interval)
 
         self.logger.stepping_environment()
 
+        self.communication.bcast(self.trainer.get_state_dict(), root=0)
+
         for nupdates in range(self.run_times):
+            tstart = time.perf_counter()
             # Get rollout
             data = self.communication.gather((), root=0)[1:]
+            self.communication.bcast(self.trainer.get_state_dict(), root=0)
 
             self.logger.done()
 
             batch = []
-            info_arr = []
             for item in data:
-                info, for_batch = item
-                batch.extend(for_batch)
-                info_arr.append(info)
-
-            eplenmean, rewardarr, frames = zip(*info_arr)
+                epinfos, for_batch = item
+                batch.append(for_batch)
+                epinfobuf.extend(epinfos[0])
 
             lr_thing = self.trainer.train(batch)
             lr_things.extend(lr_thing)
 
-            self.communication.bcast(self.trainer.get_state_dict(), root=0)
-
+            tnow = time.perf_counter()
             if nupdates % log_interval == 0:
                 actor_loss, critic_loss, entropy, approxkl, clipfrac, variance, debug = zip(*lr_things)
 
-                time_now = time.time()
                 kvpairs = {
-                    "eplenmean": logger.safemean(numpy.asarray(eplenmean).reshape(-1)),
-                    "eprewmean": logger.safemean(numpy.asarray(rewardarr).reshape(-1)),
-                    "fps": logger.safemean(frames) / max(1e-8, float(time_now - b_time)),
+                    "eplenmean": logger.safemean(numpy.asarray([epinfo['l'] for epinfo in epinfobuf]).reshape(-1)),
+                    "eprewmean": logger.safemean(numpy.asarray([epinfo['r'] for epinfo in epinfobuf]).reshape(-1)),
+                    "fps": int(nbatch / (tnow - tstart)),
                     "loss/approxkl": logger.safemean(approxkl),
                     "loss/clipfrac": logger.safemean(clipfrac),
                     "loss/policy_entropy": logger.safemean(entropy),
@@ -98,9 +99,9 @@ class Distributed:
                     "loss/value_loss": logger.safemean(critic_loss),
                     "misc/explained_variance": logger.safemean(variance),
                     "misc/nupdates": nupdates,
-                    "misc/serial_timesteps": logger.safemean(frames),
-                    "misc/time_elapsed": int(time_now - b_time),
-                    "misc/total_timesteps": logger.safemean(frames)
+                    "misc/serial_timesteps": self.nsteps*nupdates,
+                    "misc/time_elapsed": (tnow - tfirststart),
+                    "misc/total_timesteps": self.nsteps*nupdates
                 }
 
                 self.logger(kvpairs, nupdates)
@@ -119,13 +120,13 @@ class Distributed:
 
         epinfobuf = deque(maxlen=100)
 
+        self.worker.load_state_dict(self.communication.bcast(None, root=0))
+
         for nupdates in range(self.run_times):
             data, epinfos = self._one_run()
             epinfobuf.extend(epinfos)
-            self.communication.gather(((numpy.asarray([epinfo['l'] for epinfo in epinfobuf]).reshape(-1),
-                                        numpy.asarray([epinfo['r'] for epinfo in epinfobuf]).reshape(-1),
-                                        self.nsteps*nupdates), data), root=0)
 
+            self.communication.gather(((epinfobuf, self.nsteps*nupdates), data), root=0)
             self.worker.load_state_dict(self.communication.bcast(None, root=0))
 
         self.env.close()

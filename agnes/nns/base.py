@@ -61,3 +61,6 @@ class BasePolicy(nn.Module, abc.ABC):
 
     def get_val(self, states):
         return self.forward(states)[1]
+
+    def reset(self):
+        pass

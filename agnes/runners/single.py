@@ -13,10 +13,12 @@ class Single:
     """
 
     def __init__(self, env,
-                 algo: agnes.algos.base.BaseAlgo.__class__ = agnes.algos.PPO,
-                 nn=agnes.nns.MLP, config=None):
+                 algo: agnes.algos.base.BaseAlgo.__class__,
+                 nn, config=None):
         env, env_type, vec_num = env
         self.env = env
+
+        self.nn_name = nn.__class__
 
         self.cnfg, self.env_type = algo.get_config(env_type)
         if config is not None:
@@ -31,7 +33,7 @@ class Single:
 
         self.trainer = algo(nn, env.observation_space, env.action_space, self.cnfg, workers=vec_num)
 
-        self.worker = algo(nn, env.observation_space, env.action_space, self.cnfg, workers=vec_num, trainer=False)
+        self.worker: agnes.algos.base.BaseAlgo = algo(nn, env.observation_space, env.action_space, self.cnfg, workers=vec_num, trainer=False)
         if cuda.is_available():
             try:
                 self.trainer = self.trainer.to('cuda:0')
@@ -46,6 +48,7 @@ class Single:
             "envs_num": self.vec_num,
             "device": self.trainer.device_info(),
             "env_type": self.env_type,
+            "NN type": self.nn_name,
             "algo": re.split("['.]", str(self.trainer.__class__))[3]
         })
 
@@ -59,7 +62,7 @@ class Single:
         self.done = numpy.zeros(self.env.num_envs, dtype=numpy.bool)
 
         run_times = int(self.timesteps // self.nsteps)
-        epinfobuf = deque(maxlen=100)
+        epinfobuf = deque(maxlen=100 * log_interval)
         tfirststart = time.perf_counter()
 
         for nupdates in range(1, run_times+1):
