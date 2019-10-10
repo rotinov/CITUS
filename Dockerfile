@@ -8,11 +8,9 @@ ENV CODE_DIR /root/code
 COPY . $CODE_DIR/AGNES
 WORKDIR $CODE_DIR/AGNES
 
-# Clean up pycache and pyc files
 RUN rm -rf __pycache__ && \
     find . -name "*.pyc" -delete && \
     pip install -r requirements.txt && \
-    pip install mpi4py && \
     pip install .
 
 

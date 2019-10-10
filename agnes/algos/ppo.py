@@ -2,14 +2,14 @@ import torch
 import numpy
 import random
 import gym
-from agnes.algos import base
+from agnes.algos.base import BaseAlgo, BaseBuffer
 from agnes.nns import rnn
 from agnes.common import schedules, logger
 from pprint import pprint
 from agnes.algos.configs.ppo_config import get_config
 
 
-class Buffer(base.BaseBuffer):
+class Buffer(BaseBuffer):
     def __init__(self):
         self.rollouts = []
 
@@ -35,7 +35,7 @@ class Buffer(base.BaseBuffer):
         return len(self.rollouts)
 
 
-class PpoClass(base.BaseAlgo):
+class PpoClass(BaseAlgo):
     _device = torch.device('cpu')
 
     get_config = get_config
@@ -83,30 +83,23 @@ class PpoClass(base.BaseAlgo):
                                                betas=(0.99, 0.999),
                                                eps=1e-5)
 
-            self.lr_scheduler = schedules.LinearAnnealingLR(self._optimizer, eta_min=0.0,
-                                                            to_epoch=final_epoch)
+            self._lr_scheduler = schedules.LinearAnnealingLR(self._optimizer, eta_min=0.0,
+                                                             to_epoch=final_epoch)
 
             if isinstance(self.CLIPRANGE, float):
-                self.cr_schedule = schedules.LinearSchedule(lambda x: self.CLIPRANGE * x, eta_min=1.0, to_epoch=final_epoch)
+                self._cr_schedule = schedules.LinearSchedule(lambda x: self.CLIPRANGE, eta_min=1.0,
+                                                             to_epoch=final_epoch)
             else:
-                self.cr_schedule = schedules.LinearSchedule(self.CLIPRANGE, eta_min=0.0, to_epoch=final_epoch)
+                self._cr_schedule = schedules.LinearSchedule(self.CLIPRANGE, eta_min=0.0, to_epoch=final_epoch)
 
-        self.buffer = Buffer()
+        self._buffer = Buffer()
 
         self._trainer = trainer
-        PPO.FIRST = False
-
-    def __call__(self, state, done):
-        with torch.no_grad():
-            if self._device == torch.device('cpu'):
-                return self._nnet.get_action(torch.FloatTensor(state), torch.FloatTensor(done))
-            else:
-                return self._nnet.get_action(torch.cuda.FloatTensor(state), torch.cuda.FloatTensor(done))
 
     def experience(self, transition):
-        self.buffer.append(transition)
-        if len(self.buffer) >= self.nsteps:
-            data = self.buffer.rollout()
+        self._buffer.append(transition)
+        if len(self._buffer) >= self.nsteps:
+            data = self._buffer.rollout()
 
             data = self._calculate_advantages(data)
 
@@ -119,6 +112,13 @@ class PpoClass(base.BaseAlgo):
 
         if isinstance(self._nnet, rnn.RecurrentFamily):
             return self.train_with_bptt(data)
+
+        if isinstance(data[0], list):
+            data_combined = []
+            for data_per_worker in data:
+                data_combined.extend(data_per_worker)
+
+            data = data_combined
 
         # Unpack
         states, actions, old_log_probs, old_vals, returns = zip(*data)
@@ -164,36 +164,12 @@ class PpoClass(base.BaseAlgo):
 
         return info
 
-    def update(self, from_agent: base.BaseAlgo):
-        assert not self._trainer
-
-        self._nnet.load_state_dict(from_agent._nnet.state_dict())
-
-        return True
-
-    def get_state_dict(self):
-        assert self._trainer
-        return self._nnet.state_dict()
-
-    def get_nn_instance(self):
-        assert self._trainer
-        return self._nnet
-
-    def load_state_dict(self, state_dict):
-        return self._nnet.load_state_dict(state_dict)
-
     def to(self, device: str):
         device = torch.device(device)
         self._device = device
         self._nnet = self._nnet.to(device)
 
         return self
-
-    def device_info(self):
-        if self._device.type == 'cuda':
-            return torch.cuda.get_device_name(device=self._device)
-        else:
-            return 'CPU'
 
     def _calculate_advantages(self, data):
         states, actions, nstates, rewards, dones, outs = zip(*data)
@@ -289,7 +265,7 @@ class PpoClass(base.BaseAlgo):
         OLDVALS = OLDVALS.view_as(t_state_vals)
         ADVANTAGES = RETURNS - OLDVALS
 
-        self.CLIPRANGE = self.cr_schedule.get_v()
+        self.CLIPRANGE = self._cr_schedule.get_v()
 
         # Normalizing advantages
         ADVS = ((ADVANTAGES - ADVANTAGES.mean()) / (ADVANTAGES.std() + 1e-8))
@@ -339,8 +315,8 @@ class PpoClass(base.BaseAlgo):
 
         # Optimizer step
         self._optimizer.step()
-        self.lr_scheduler.step()
-        self.cr_schedule.step()
+        self._lr_scheduler.step()
+        self._cr_schedule.step()
 
         return (t_actor_loss.item(),
                 t_critic_loss.item(),
@@ -359,52 +335,78 @@ class PpoClass(base.BaseAlgo):
                        RETURNS,
                        ADDITIONS,
                        DONES):
+
+        FIRST_ADDITION = ADDITIONS[0]
+        if FIRST_ADDITION.ndim == 4:
+            is_lstm = True
+        else:
+            is_lstm = False
+
         # Tensors
         if self._device == torch.device('cpu'):
-            STATES = torch.FloatTensor(STATES)
-            if self._nnet.type_of_out() == torch.int16:
-                ACTIONS = torch.LongTensor(ACTIONS)
-            else:
-                ACTIONS = torch.FloatTensor(ACTIONS)
             OLDLOGPROBS = torch.FloatTensor(OLDLOGPROBS)
             OLDVALS = torch.FloatTensor(OLDVALS)
             RETURNS = torch.FloatTensor(RETURNS)
-            ADDITIONS = torch.FloatTensor(ADDITIONS[0]).requires_grad_()
-            DONES = torch.FloatTensor(DONES)
-        else:
-            STATES = torch.cuda.FloatTensor(STATES)
-            if self._nnet.type_of_out() == torch.int16:
-                ACTIONS = torch.cuda.LongTensor(ACTIONS)
+            if is_lstm:
+                t_addition = (torch.FloatTensor(FIRST_ADDITION[0]).requires_grad_(),
+                              torch.FloatTensor(FIRST_ADDITION[1]).requires_grad_())
             else:
-                ACTIONS = torch.cuda.FloatTensor(ACTIONS)
+                t_addition = torch.FloatTensor(FIRST_ADDITION).requires_grad_()
+        else:
             OLDLOGPROBS = torch.cuda.FloatTensor(OLDLOGPROBS)
             OLDVALS = torch.cuda.FloatTensor(OLDVALS)
             RETURNS = torch.cuda.FloatTensor(RETURNS)
-            ADDITIONS = torch.cuda.FloatTensor(ADDITIONS[0]).requires_grad_()
-            DONES = torch.cuda.FloatTensor(DONES)
+            if is_lstm:
+                t_addition = (torch.cuda.FloatTensor(FIRST_ADDITION[0]).requires_grad_(),
+                              torch.cuda.FloatTensor(FIRST_ADDITION[1]).requires_grad_())
+            else:
+                t_addition = torch.cuda.FloatTensor(FIRST_ADDITION).requires_grad_()
 
         # Feedforward with building computation graph
         l_new_log_probs = []
         l_state_vals = []
-        t_addition = ADDITIONS
 
-        for t_state, t_done, t_action in zip(STATES, DONES, ACTIONS):
+        for n_state, n_done, n_action in zip(STATES, DONES, ACTIONS):
+            if n_done.size == 0:
+                break
+
+            n_done = n_done[-1]
+            if self._device == torch.device('cpu'):
+                t_state = torch.FloatTensor(n_state)
+                t_done = torch.FloatTensor(n_done)
+                if self._nnet.type_of_out() == torch.int16:
+                    t_action = torch.LongTensor(n_action)
+                else:
+                    t_action = torch.FloatTensor(n_action)
+            else:
+                t_state = torch.cuda.FloatTensor(n_state)
+                t_done = torch.cuda.FloatTensor(n_done)
+                if self._nnet.type_of_out() == torch.int16:
+                    t_action = torch.cuda.LongTensor(n_action)
+                else:
+                    t_action = torch.cuda.FloatTensor(n_action)
+
             t_distrib, t_addition, t_state_vals_un = self._nnet(t_state, t_addition)
             if t_done.ndimension() < 2:
                 t_done = t_done.unsqueeze(-1)
 
-            t_addition = (1. - t_done) * t_addition
+            if is_lstm:
+                t_addition = ((1. - t_done) * t_addition[0], (1. - t_done) * t_addition[1])
+            else:
+                t_addition = (1. - t_done) * t_addition
 
             l_state_vals.append(t_state_vals_un.squeeze(-1))
+            if t_action.ndimension() == 1:
+                t_action = t_action.unsqueeze(-1)
             l_new_log_probs.append(t_distrib.log_prob(t_action).squeeze(-1))
 
-        t_new_log_probs = torch.stack(l_new_log_probs, dim=0)
-        t_state_vals = torch.stack(l_state_vals, dim=0)
+        t_new_log_probs = torch.cat(l_new_log_probs, dim=0)
+        t_state_vals = torch.cat(l_state_vals, dim=0)
 
         OLDVALS = OLDVALS.view_as(t_state_vals)
         ADVANTAGES = RETURNS - OLDVALS
 
-        self.CLIPRANGE = self.cr_schedule.get_v()
+        self.CLIPRANGE = self._cr_schedule.get_v()
 
         # Normalizing advantages
         ADVS = ((ADVANTAGES - ADVANTAGES.mean()) / (ADVANTAGES.std() + 1e-8))
@@ -451,8 +453,8 @@ class PpoClass(base.BaseAlgo):
 
         # Optimizer step
         self._optimizer.step()
-        self.lr_scheduler.step()
-        self.cr_schedule.step()
+        self._lr_scheduler.step()
+        self._cr_schedule.step()
 
         return (t_actor_loss.item(),
                 t_critic_loss.item(),
@@ -466,15 +468,47 @@ class PpoClass(base.BaseAlgo):
 
     def train_with_bptt(self, data):
         # Unpack
-        states, actions, old_log_probs, old_vals, returns, additions, dones = zip(*data)
+        if isinstance(data[0], list):
+            states_combined = []
+            actions_combined = []
+            old_log_probs_combined = []
+            old_vals_combined = []
+            returns_combined = []
+            additions_combined = []
+            dones_combined = []
+            for data_per_worker in data:
+                states_per_worker, actions_per_worker, old_log_probs_per_worker, old_vals_per_worker, \
+                    returns_per_worker, additions_per_worker, dones_per_worker = zip(*data_per_worker)
 
-        states = numpy.asarray(states)
-        actions = numpy.asarray(actions)
-        old_log_probs = numpy.asarray(old_log_probs)
-        old_vals = numpy.asarray(old_vals)
-        returns = numpy.asarray(returns)
-        additions = numpy.asarray(additions)
-        dones = numpy.asarray(dones)
+                states_combined.append(numpy.asarray(states_per_worker))
+                actions_combined.append(numpy.asarray(actions_per_worker))
+                old_log_probs_combined.append(numpy.asarray(old_log_probs_per_worker))
+                old_vals_combined.append(numpy.asarray(old_vals_per_worker))
+                returns_combined.append(numpy.asarray(returns_per_worker))
+                dones_combined.append(numpy.asarray(dones_per_worker))
+
+                hs = list(zip(*additions_per_worker))
+                #  axis = 3
+
+                additions_combined.append(numpy.asarray(hs))
+
+            states = numpy.concatenate(states_combined, axis=1)
+            actions = numpy.concatenate(actions_combined, axis=1)
+            old_log_probs = numpy.concatenate(old_log_probs_combined, axis=1)
+            old_vals = numpy.concatenate(old_vals_combined, axis=1)
+            returns = numpy.concatenate(returns_combined, axis=1)
+            additions = numpy.concatenate(additions_combined, axis=3).swapaxes(0, 1)
+            dones = numpy.concatenate(dones_combined, axis=1)
+        else:
+            states, actions, old_log_probs, old_vals, returns, additions, dones = zip(*data)
+
+            states = numpy.asarray(states)
+            actions = numpy.asarray(actions)
+            old_log_probs = numpy.asarray(old_log_probs)
+            old_vals = numpy.asarray(old_vals)
+            returns = numpy.asarray(returns)
+            additions = numpy.asarray(additions)
+            dones = numpy.asarray(dones)
 
         states_batches = numpy.asarray(numpy.split(states, self.nminibatches, axis=0))
         actions_batchs = numpy.asarray(numpy.split(actions, self.nminibatches, axis=0))
@@ -511,14 +545,18 @@ class PpoClass(base.BaseAlgo):
                           additions_batchs,
                           dones_batchs
                           ):
+                indexes = 1 + numpy.argwhere(numpy.max(dones_batch, axis=-1) == 1).reshape(-1)
+                states_batch_prep = numpy.split(states_batch, indexes, 0)
+                actions_batch_prep = numpy.split(actions_batch, indexes, 0)
+                dones_batch_prep = numpy.split(dones_batch, indexes, 0)
                 info.append(
-                    self._one_train_seq(states_batch,
-                                        actions_batch,
+                    self._one_train_seq(states_batch_prep,
+                                        actions_batch_prep,
                                         old_log_probs_batch,
                                         old_vals_batch,
                                         returns_batch,
                                         additions_batch,
-                                        dones_batch)
+                                        dones_batch_prep)
                 )
 
         # return info
