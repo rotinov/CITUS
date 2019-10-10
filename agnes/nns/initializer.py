@@ -1,6 +1,4 @@
-import agnes.nns.mlp as mlp
-import agnes.nns.cnn as cnn
-import agnes.nns.rnn as rnn
+from agnes.nns import mlp, cnn, rnn
 from gym import spaces
 from abc import ABC
 
