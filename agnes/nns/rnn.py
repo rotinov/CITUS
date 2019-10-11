@@ -22,7 +22,7 @@ class RecurrentFamily(BasePolicy):
         assert x.ndimension() == 1 + self.obs_space_n, "Only batches are supported"
         hs = self._hs
         if self._hs is not None:
-            self._hs = self._hs * (1. - dones.unsqueeze(-1))
+            self._hs = self._hs.masked_fill(dones.unsqueeze(0).unsqueeze(-1).type(torch.BoolTensor), 0.0)
             hs = self._hs
 
         dist, self._hs, state_value = self.forward(x, self._hs)
@@ -207,8 +207,8 @@ class LSTMCNNDiscrete(RecurrentCnnFamily):
         assert x.ndimension() == 1 + self.obs_space_n, "Only batches are supported"
         hs = self._hs
         if self._hs is not None:
-            self._hs = (self._hs[0] * (1. - dones.unsqueeze(-1)),
-                        self._hs[1] * (1. - dones.unsqueeze(-1)))
+            self._hs = (self._hs[0].masked_fill(dones.unsqueeze(0).unsqueeze(-1).type(torch.BoolTensor), 0.0),
+                        self._hs[1].masked_fill(dones.unsqueeze(0).unsqueeze(-1).type(torch.BoolTensor), 0.0))
             hs = self._hs
 
         dist, self._hs, state_value = self.forward(x, self._hs)
