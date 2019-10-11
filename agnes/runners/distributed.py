@@ -10,10 +10,11 @@ import numpy
 
 class Distributed:
     logger = logger.ListLogger()
+    trainer: agnes.algos.base.BaseAlgo
+    worker: agnes.algos.base.BaseAlgo
 
     def __init__(self, env,
-                 algo: agnes.algos.base.BaseAlgo.__class__,
-                 nn, config=None):
+                 algo, nn, config=None):
         env, env_type, vec_num = env
         self.env = env
 
@@ -63,8 +64,6 @@ class Distributed:
         nbatch = self.nsteps * self.env.num_envs * self.workers_num
         epinfobuf = deque(maxlen=100 * self.workers_num * log_interval)
 
-        self.logger.stepping_environment()
-
         self.communication.bcast(self.trainer.get_state_dict(), root=0)
 
         for nupdates in range(self.run_times):
@@ -72,8 +71,6 @@ class Distributed:
             # Get rollout
             data = self.communication.gather((), root=0)[1:]
             self.communication.bcast(self.trainer.get_state_dict(), root=0)
-
-            self.logger.done()
 
             batch = []
             for item in data:
@@ -107,8 +104,6 @@ class Distributed:
                 self.logger(kvpairs, nupdates)
 
                 lr_things = []
-
-            self.logger.stepping_environment()
 
         MPI.Finalize()
 

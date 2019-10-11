@@ -373,14 +373,14 @@ class PpoClass(BaseAlgo):
             n_done = n_done[-1]
             if self._device == torch.device('cpu'):
                 t_state = torch.FloatTensor(n_state)
-                t_done = torch.FloatTensor(n_done)
+                t_done = torch.BoolTensor(n_done)
                 if self._nnet.type_of_out() == torch.int16:
                     t_action = torch.LongTensor(n_action)
                 else:
                     t_action = torch.FloatTensor(n_action)
             else:
                 t_state = torch.cuda.FloatTensor(n_state)
-                t_done = torch.cuda.FloatTensor(n_done)
+                t_done = torch.cuda.BoolTensor(n_done)
                 if self._nnet.type_of_out() == torch.int16:
                     t_action = torch.cuda.LongTensor(n_action)
                 else:
@@ -391,9 +391,10 @@ class PpoClass(BaseAlgo):
                 t_done = t_done.unsqueeze(-1)
 
             if is_lstm:
-                t_addition = ((1. - t_done) * t_addition[0], (1. - t_done) * t_addition[1])
+                t_addition = (t_addition[0].masked_fill(t_done.unsqueeze(0), 0.0),
+                              t_addition[1].masked_fill(t_done.unsqueeze(0), 0.0))
             else:
-                t_addition = (1. - t_done) * t_addition
+                t_addition = t_addition.masked_fill(t_done.unsqueeze(0), 0.0)
 
             l_state_vals.append(t_state_vals_un.squeeze(-1))
             if t_action.ndimension() == 1:
