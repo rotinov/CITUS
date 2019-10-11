@@ -1,51 +1,39 @@
 from mpi4py import MPI
 
-import agnes
-from agnes.common import logger
+from agnes.common.schedules import Saver
+from agnes.runners.base_runner import BaseRunner
+from agnes.algos.base import BaseAlgo
+
 import time
 from torch import cuda
 from collections import deque
 import numpy
 
 
-class Distributed:
-    logger = logger.ListLogger()
-    trainer: agnes.algos.base.BaseAlgo
-    worker: agnes.algos.base.BaseAlgo
+class Distributed(BaseRunner):
+    trainer: BaseAlgo
+    worker: BaseAlgo
 
-    def __init__(self, env,
-                 algo, nn, config=None):
-        env, env_type, vec_num = env
-        self.env = env
+    def __init__(self, env, algo, nn, config=None):
+        super().__init__(env, algo, nn, config)
 
-        self.cnfg, self.env_type = algo.get_config(env_type)
-        if config is not None:
-            self.cnfg = config
-
-        self.timesteps = self.cnfg['timesteps']
-        self.nsteps = self.cnfg['nsteps']
         self.run_times = int(numpy.ceil(self.timesteps / self.nsteps))
 
         self.communication = MPI.COMM_WORLD
         self.rank = self.communication.Get_rank()
 
         self.workers_num = (self.communication.Get_size() - 1)
-        self.vec_num = vec_num
 
         if self.rank == 0:
             print(self.env_type)
-            self.trainer = algo(nn, env.observation_space, env.action_space, self.cnfg,
+            self.trainer = algo(nn, self.env.observation_space, self.env.action_space, self.cnfg,
                                 workers=self.workers_num*self.vec_num, trainer=True)
             if cuda.is_available():
                 self.trainer = self.trainer.to('cuda:0')
 
             self.env.close()
         else:
-            self.worker = algo(nn, env.observation_space, env.action_space, self.cnfg, trainer=False)
-
-    def log(self, *args):
-        if self.is_trainer():
-            self.logger = logger.ListLogger(args)
+            self.worker = algo(nn, self.env.observation_space, self.env.action_space, self.cnfg, trainer=False)
 
     def run(self, log_interval=1):
         if self.rank == 0:
@@ -82,26 +70,11 @@ class Distributed:
             lr_things.extend(lr_thing)
 
             tnow = time.perf_counter()
+
+            self.saver.save(self.trainer, self.nsteps*nupdates)
+
             if nupdates % log_interval == 0:
-                actor_loss, critic_loss, entropy, approxkl, clipfrac, variance, debug = zip(*lr_things)
-
-                kvpairs = {
-                    "eplenmean": logger.safemean(numpy.asarray([epinfo['l'] for epinfo in epinfobuf]).reshape(-1)),
-                    "eprewmean": logger.safemean(numpy.asarray([epinfo['r'] for epinfo in epinfobuf]).reshape(-1)),
-                    "fps": int(nbatch / (tnow - tstart)),
-                    "loss/approxkl": logger.safemean(approxkl),
-                    "loss/clipfrac": logger.safemean(clipfrac),
-                    "loss/policy_entropy": logger.safemean(entropy),
-                    "loss/policy_loss": logger.safemean(actor_loss),
-                    "loss/value_loss": logger.safemean(critic_loss),
-                    "misc/explained_variance": logger.safemean(variance),
-                    "misc/nupdates": nupdates,
-                    "misc/serial_timesteps": self.nsteps*nupdates,
-                    "misc/time_elapsed": (tnow - tfirststart),
-                    "misc/total_timesteps": self.nsteps*nupdates
-                }
-
-                self.logger(kvpairs, nupdates)
+                self._one_log(lr_things, epinfobuf, nbatch, tfirststart, tstart, tnow, nupdates)
 
                 lr_things = []
 
@@ -128,25 +101,6 @@ class Distributed:
         time.sleep(0.1)
 
         # MPI.Finalize()
-
-    def _one_run(self):
-        data = None
-        epinfos = []
-        for step in range(self.nsteps):
-            action, pred_action, out = self.worker(self.state, self.done)
-            nstate, reward, done, infos = self.env.step(action)
-            self.done = done
-            for info in infos:
-                maybeepinfo = info.get('episode')
-                if maybeepinfo:
-                    epinfos.append(maybeepinfo)
-
-            transition = (self.state, pred_action, nstate, reward, done, out)
-            data = self.worker.experience(transition)
-
-            self.state = nstate
-
-        return data, epinfos
 
     def __del__(self):
         pass
