@@ -1,4 +1,5 @@
 from torch.optim.lr_scheduler import _LRScheduler
+from agnes.algos.base import BaseAlgo
 
 
 class LinearAnnealingLR(_LRScheduler):
@@ -35,3 +36,24 @@ class LinearSchedule:
         return self.eta_min + max(0.,
                                   (1. - self.eta_min) * (1. - self._step_count / self.to_epoch)
                                   )
+
+
+class Saver:
+    filename = None
+    frames_period = None
+    _counter = 0
+    _active = False
+
+    def __init__(self, filename=None, frames_period=None):
+        if filename is not None:
+            self.filename = filename
+            self.frames_period = frames_period
+            self._active = True
+
+    def save(self, algo: BaseAlgo, frames_now):
+        if not self._active:
+            return
+
+        if (self.frames_period * self._counter - frames_now) < self.frames_period:
+            algo.save(self.filename)
+            self._counter += 1

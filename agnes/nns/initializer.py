@@ -12,6 +12,8 @@ class _BaseChooser(ABC):
 
 
 class MLPChooser(_BaseChooser):
+    meta = "MLP"
+
     def __call__(self, observation_space: spaces.Space, action_space: spaces.Space):
         if len(observation_space.shape) == 3:
             warnings.warn("Looks like you're using MLP for images. CNN is recommended.")
@@ -23,6 +25,8 @@ class MLPChooser(_BaseChooser):
 
 
 class CNNChooser(_BaseChooser):
+    meta = "CNN"
+
     def __init__(self, shared=True, policy_nn=None, value_nn=None):
         super().__init__()
 
@@ -47,11 +51,15 @@ class CNNChooser(_BaseChooser):
 
 
 class RNNinit(_BaseChooser):
+    meta = "RNN"
+
     def __call__(self, observation_space: spaces.Space, action_space: spaces.Space):
         return rnn.RNNDiscrete(observation_space, action_space)
 
 
 class RNNCNNinitializer(_BaseChooser):
+    meta = "RNN-CNN"
+
     def __init__(self, gru=False):
         super().__init__()
         self.gru = gru
@@ -61,6 +69,8 @@ class RNNCNNinitializer(_BaseChooser):
 
 
 class LSTMCNNinitializer(_BaseChooser):
+    meta = "LSTM-CNN"
+
     def __call__(self, observation_space: spaces.Space, action_space: spaces.Space):
         return rnn.LSTMCNNDiscrete(observation_space, action_space)
 
