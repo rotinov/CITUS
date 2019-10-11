@@ -6,7 +6,7 @@ from agnes.common.init_weights import get_weights_init
 from gym import spaces
 import numpy
 from agnes.nns.base import BasePolicy
-from agnes.common.make_nn import Cnn, CnnBody, CnnHead
+from agnes.common.make_nn import Cnn, CnnSmallBody, make_fc
 
 
 class CnnFamily(BasePolicy, ABC):
@@ -21,7 +21,7 @@ class CNNDiscreteCopy(CnnFamily):
 
         # actor's layer
         if policy_fn is None:
-            self.actor_head = Cnn(input_shape, self.actions_n)
+            self.actor_head = Cnn(input_shape, self.actions_n, body=CnnSmallBody)
         else:
             self.actor_head = policy_fn(self.actions_n)
 
@@ -50,17 +50,19 @@ class CNNDiscreteCopy(CnnFamily):
 
 
 class CNNDiscreteShared(CnnFamily):
+    hidden_size = 512
+
     def __init__(self, observation_space, action_space: spaces.Space):
         super(CNNDiscreteShared, self).__init__(observation_space, action_space)
         input_shape = observation_space.shape
 
-        self.conv = CnnBody(input_shape=input_shape)
+        self.conv = Cnn(input_shape, self.hidden_size, num_layers=1, activate_last=True, body=CnnSmallBody)
 
         # actor's layer
-        self.actor_head = CnnHead(self.conv.output_size, self.actions_n)
+        self.actor_head = make_fc(self.hidden_size, self.actions_n, num_layers=1)
 
         # critic's layer
-        self.critic_head = CnnHead(self.conv.output_size, 1)
+        self.critic_head = make_fc(self.hidden_size, 1, num_layers=1)
         self.conv.apply(get_weights_init('relu'))
 
         self.actor_head.apply(get_weights_init(numpy.sqrt(0.01)))
@@ -73,34 +75,8 @@ class CNNDiscreteShared(CnnFamily):
         both = self.conv(x)
 
         state_value = self.critic_head(both)
-
         policy = self.actor_head(both)
 
         dist = Categorical(logits=policy)
 
         return dist, state_value
-
-
-class CNNChooser:
-    def __init__(self, shared=True, policy_nn=None, value_nn=None):
-        if shared:
-            if policy_nn is not None or value_nn is not None:
-                raise NameError('Shared network with custom layers is not supported for now.')
-
-            self.nn = CNNDiscreteShared
-        else:
-            self.nn = CNNDiscreteCopy
-            self.policy_nn = policy_nn
-            self.value_nn = value_nn
-
-    def __call__(self, observation_space, action_space):
-        if isinstance(action_space, spaces.Box):
-            raise NameError('Continuous environments are not supported yet.')
-
-        if self.nn == CNNDiscreteShared:
-            return self.nn(observation_space, action_space)
-        else:
-            return self.nn(observation_space, action_space, self.policy_nn, self.value_nn)
-
-
-CNN = CNNChooser()

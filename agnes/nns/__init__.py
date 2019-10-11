@@ -1,3 +1,2 @@
-from agnes.nns.mlp import MLP
-from agnes.nns.cnn import CNN
-from agnes.nns.rnn import RNN, RNNCNN
+from agnes.nns import mlp, cnn, rnn
+from agnes.nns.initializer import MLP, CNN, RNN, RNNCNN, GRUCNN, LSTMCNN

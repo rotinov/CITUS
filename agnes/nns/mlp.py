@@ -54,13 +54,3 @@ class MLPContinuous(MlpFamily):
         dist = Normal(mu, std)
 
         return dist, state_value.squeeze(-1)
-
-
-def MLP(observation_space: spaces.Space, action_space: spaces.Space):
-    if len(observation_space.shape) == 3:
-        warnings.warn("Looks like you're using MLP for images. CNN is recommended.")
-
-    if isinstance(action_space, spaces.Box):
-        return MLPContinuous(observation_space, action_space)
-    else:
-        return MLPDiscrete(observation_space, action_space)

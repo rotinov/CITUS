@@ -10,15 +10,15 @@ def test_config():
         gamma=1.0,
         lam=1.0,
         noptepochs=4,
-        max_grad_norm=40,
-        learning_rate=2.5e-4,
-        cliprange=lambda x: 0.2*x,
+        max_grad_norm=40.0,
+        learning_rate=1e-3,
+        cliprange=lambda x: 0.3*x,
         vf_coef=1.0,
-        ent_coef=.01
+        ent_coef=.005
     )
 
 
-env_name = "CartPole-v1"
+env_name = "CartPole-v0"
 
 
 if __name__ == '__main__':

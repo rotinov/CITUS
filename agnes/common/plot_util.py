@@ -42,6 +42,7 @@ def smooth(y, radius, mode='two_sided', valid_only=False):
             out[:radius] = np.nan
     return out
 
+
 def one_sided_ema(xolds, yolds, low=None, high=None, n=512, decay_steps=1., low_counts_threshold=1e-8):
     '''
     perform one-sided (causal) EMA (exponential moving average)
@@ -187,7 +188,7 @@ def load_results(root_dir_or_dirs, enable_progress=True, enable_monitor=True, ve
                 files[:] = []
                 continue
             monitor_re = re.compile(r'(\d+\.)?(\d+\.)?monitor\.csv')
-            if set(['metadata.json', 'monitor.json', 'progress.json', 'progress.csv']).intersection(files) or \
+            if {'metadata.json', 'monitor.json', 'progress.json', 'progress.csv'}.intersection(files) or \
                any([f for f in files if monitor_re.match(f)]):  # also match monitor files like 0.1.monitor.csv
                 # used to be uncommented, which means do not go deeper than current directory if any of the data files
                 # are found

@@ -60,21 +60,18 @@ def get_weights_init(activation='tanh'):
                 if len(param.shape) >= 2:
                     nn.init.orthogonal_(param.data, recurrent_gain)
                 else:
-                    # nn.init.normal_(param.data)
-                    nn.init.zeros_(m.bias.data)
+                    nn.init.normal_(param.data)
         elif isinstance(m, nn.GRU):
             for param in m.parameters():
                 if len(param.shape) >= 2:
                     nn.init.orthogonal_(param.data, recurrent_gain)
                 else:
-                    # nn.init.normal_(param.data)
-                    nn.init.zeros_(m.bias.data)
+                    nn.init.normal_(param.data)
         elif isinstance(m, nn.GRUCell):
             for param in m.parameters():
                 if len(param.shape) >= 2:
                     nn.init.orthogonal_(param.data, recurrent_gain)
                 else:
-                    nn.init.zeros_(m.bias.data)
-                    # nn.init.normal_(param.data)
+                    nn.init.normal_(param.data)
 
     return weights_init
