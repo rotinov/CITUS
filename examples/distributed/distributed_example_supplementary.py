@@ -13,4 +13,7 @@ if __name__ == '__main__':
     runner.log(agnes.log, agnes.TensorboardLogger(".logs/"+str(time.time())))
     runner.run()
 
+    if runner.is_trainer():
+        runner.trainer.save("Breakout.pth")
+
     del runner
