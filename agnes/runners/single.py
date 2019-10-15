@@ -1,6 +1,6 @@
 from collections import deque
 from agnes.runners.base_runner import BaseRunner
-from agnes.algos.base import BaseAlgo
+from agnes.algos.base import _BaseAlgo
 from agnes.nns.initializer import _BaseChooser
 from torch import cuda
 import numpy
@@ -12,16 +12,16 @@ class Single(BaseRunner):
     "Single" runner is compatible with vector environments(config or env_type should be specified manually).
     """
 
-    def __init__(self, env, algo, nn, config=None):
+    def __init__(self, env, algo, nn: _BaseChooser, config=None):
         super().__init__(env, algo, nn, config)
 
         print('Env type: ', self.env_type, 'Envs num:', self.vec_num)
 
-        self.trainer: BaseAlgo = algo(nn, self.env.observation_space, self.env.action_space,
-                                      self.cnfg, workers=self.vec_num)
+        self.trainer: _BaseAlgo = algo(nn, self.env.observation_space, self.env.action_space,
+                                       self.cnfg, workers=self.vec_num)
 
-        self.worker: BaseAlgo = algo(nn, self.env.observation_space, self.env.action_space,
-                                     self.cnfg, workers=self.vec_num, trainer=False)
+        self.worker: _BaseAlgo = algo(nn, self.env.observation_space, self.env.action_space,
+                                      self.cnfg, workers=self.vec_num, trainer=False)
         if cuda.is_available():
             try:
                 self.trainer = self.trainer.to('cuda:0')

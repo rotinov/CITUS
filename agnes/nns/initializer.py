@@ -1,13 +1,18 @@
-from agnes.nns import mlp, cnn, rnn
+from agnes.nns import mlp, cnn, rnn, base
 from gym import spaces
 from abc import ABC
 
 
 class _BaseChooser(ABC):
+    meta = "BASE"
+
     def __init__(self):
         pass
 
-    def __call__(self, observation_space: spaces.Space, action_space: spaces.Space):
+    def config(self, *args):
+        return self
+
+    def __call__(self, observation_space: spaces.Space, action_space: spaces.Space) -> base._BasePolicy:
         pass
 
 
@@ -27,9 +32,12 @@ class MLPChooser(_BaseChooser):
 class CNNChooser(_BaseChooser):
     meta = "CNN"
 
-    def __init__(self, shared=True, policy_nn=None, value_nn=None):
-        super().__init__()
+    shared = True
+    policy_nn = None
+    value_nn = None
+    nn = cnn.CNNDiscreteShared
 
+    def config(self, shared=True, policy_nn=None, value_nn=None):
         if shared:
             if policy_nn is not None or value_nn is not None:
                 raise NameError('Shared network with custom layers is not supported for now.')
@@ -39,8 +47,9 @@ class CNNChooser(_BaseChooser):
             self.nn = cnn.CNNDiscreteCopy
             self.policy_nn = policy_nn
             self.value_nn = value_nn
+        return self
 
-    def __call__(self, observation_space, action_space):
+    def __call__(self, observation_space: spaces.Space, action_space: spaces.Space):
         if isinstance(action_space, spaces.Box):
             raise NameError('Continuous environments are not supported yet.')
 
@@ -54,15 +63,19 @@ class RNNinit(_BaseChooser):
     meta = "RNN"
 
     def __call__(self, observation_space: spaces.Space, action_space: spaces.Space):
-        return rnn.RNNDiscrete(observation_space, action_space)
+        if isinstance(action_space, spaces.Box):
+            return rnn.RNNContinuous(observation_space, action_space)
+        else:
+            return rnn.RNNDiscrete(observation_space, action_space)
 
 
 class RNNCNNinitializer(_BaseChooser):
     meta = "RNN-CNN"
+    gru = False
 
-    def __init__(self, gru=False):
-        super().__init__()
+    def config(self, gru):
         self.gru = gru
+        return self
 
     def __call__(self, observation_space: spaces.Space, action_space: spaces.Space):
         return rnn.RNNCNNDiscrete(observation_space, action_space, gru=self.gru)
@@ -80,6 +93,6 @@ MLP = MLPChooser()
 CNN = CNNChooser()
 
 RNN = RNNinit()
-RNNCNN = RNNCNNinitializer(gru=False)
-GRUCNN = RNNCNNinitializer(gru=True)
+RNNCNN = RNNCNNinitializer().config(gru=False)
+GRUCNN = RNNCNNinitializer().config(gru=True)
 LSTMCNN = LSTMCNNinitializer()

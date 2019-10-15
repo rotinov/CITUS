@@ -1,5 +1,5 @@
 from torch.optim.lr_scheduler import _LRScheduler
-from agnes.algos.base import BaseAlgo
+from agnes.algos.base import _BaseAlgo
 
 
 class LinearAnnealingLR(_LRScheduler):
@@ -50,7 +50,7 @@ class Saver:
             self.frames_period = frames_period
             self._active = True
 
-    def save(self, algo: BaseAlgo, frames_now):
+    def save(self, algo: _BaseAlgo, frames_now):
         if not self._active:
             return
 

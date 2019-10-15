@@ -1,13 +1,12 @@
 import torch
 from abc import ABCMeta, abstractmethod
 
-
 torch.backends.cudnn.deterministic = False
 torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.enabled = True
 
 
-class BaseBuffer(object):
+class _BaseBuffer(object):
     def append(self, transition):
         pass
 
@@ -21,8 +20,10 @@ class BaseBuffer(object):
         pass
 
 
-class BaseAlgo(metaclass=ABCMeta):
+class _BaseAlgo(metaclass=ABCMeta):
     _nnet: torch.nn.Module
+
+    meta = "BASE"
 
     @abstractmethod
     def __init__(self, *args):
@@ -69,7 +70,7 @@ class BaseAlgo(metaclass=ABCMeta):
         pass
 
     def to(self, device):
-        pass
+        return self
 
     def device_info(self):
         if self._device.type == 'cuda':

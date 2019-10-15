@@ -1,21 +1,24 @@
+import abc
 import torch
-import torch.nn as nn
 from torch.distributions import Categorical, Normal
-from agnes.common.init_weights import get_weights_init
 from gym import spaces
 import numpy
-import abc
+
+from agnes.common.init_weights import get_weights_init
 
 
-class BasePolicy(nn.Module, abc.ABC):
+class _BasePolicy(torch.nn.Module, abc.ABC):
     action_space = None
     actions_n = None
     obs_space_n = None
     obs_space = 1
     is_discrete = True
 
+    layers_num = 3
+    hidden_size = 64
+
     def __init__(self, observation_space: spaces.Space, action_space: spaces.Space):
-        super(BasePolicy, self).__init__()
+        super(_BasePolicy, self).__init__()
         self.action_space = action_space
 
         if isinstance(action_space, spaces.Discrete):

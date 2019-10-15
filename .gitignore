@@ -1,8 +1,10 @@
 .idea/
 *.pyc
 .logs/
+UML/
 *.py___jb_tmp___
 *.pstat
 *.pth
 profile_instructions.txt
 run-instructions.txt
+!examples/distributed_rnn/Temporary_Breakout.pth

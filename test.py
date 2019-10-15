@@ -8,3 +8,4 @@ if __name__ == '__main__':
     test_pack.CNN_Discrete.test_single()
     test_pack.RNN_Discrete.test_single()
     test_pack.MPI_runner.test_single()
+    print("Tests successfully completed!")

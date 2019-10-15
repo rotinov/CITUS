@@ -1,15 +1,17 @@
 import torch
 import numpy
 import random
-import gym
-from agnes.algos.base import BaseAlgo, BaseBuffer
+from typing import Tuple
+from gym.spaces import Space
+from agnes.algos.base import _BaseAlgo, _BaseBuffer
+from agnes.nns.initializer import _BaseChooser
 from agnes.nns import rnn
 from agnes.common import schedules, logger
 from pprint import pprint
 from agnes.algos.configs.ppo_config import get_config
 
 
-class Buffer(BaseBuffer):
+class Buffer(_BaseBuffer):
     def __init__(self):
         self.rollouts = []
 
@@ -35,17 +37,21 @@ class Buffer(BaseBuffer):
         return len(self.rollouts)
 
 
-class PpoClass(BaseAlgo):
+class PpoClass(_BaseAlgo):
     _device = torch.device('cpu')
 
     get_config = get_config
 
-    def __init__(self, nn,
-                 observation_space=gym.spaces.Discrete(5),
-                 action_space=gym.spaces.Discrete(5),
+    meta = "PPO"
+
+    def __init__(self, nn: _BaseChooser,
+                 observation_space: Space,
+                 action_space: Space,
                  cnfg=None,
                  workers=1,
-                 trainer=True):
+                 trainer=True,
+                 betas=(0.99, 0.999),
+                 eps=1e-5):
         super().__init__()
 
         self.nn_type = nn
@@ -79,9 +85,7 @@ class PpoClass(BaseAlgo):
         final_epoch = int(self.final_timestep / self.nsteps * self.nminibatches * self.noptepochs)  # 312500
 
         if trainer:
-            self._optimizer = torch.optim.Adam(self._nnet.parameters(), lr=self.learning_rate,
-                                               betas=(0.99, 0.999),
-                                               eps=1e-5)
+            self._optimizer = torch.optim.Adam(self._nnet.parameters(), lr=self.learning_rate, betas=betas, eps=eps)
 
             self._lr_scheduler = schedules.LinearAnnealingLR(self._optimizer, eta_min=0.0,
                                                              to_epoch=final_epoch)
@@ -110,7 +114,7 @@ class PpoClass(BaseAlgo):
         if data is None:
             return None
 
-        if isinstance(self._nnet, rnn.RecurrentFamily):
+        if isinstance(self._nnet, rnn._RecurrentFamily):
             return self.train_with_bptt(data)
 
         if isinstance(data[0], list):
@@ -173,7 +177,7 @@ class PpoClass(BaseAlgo):
 
     def _calculate_advantages(self, data):
         states, actions, nstates, rewards, dones, outs = zip(*data)
-        if isinstance(self._nnet, rnn.RecurrentFamily):
+        if isinstance(self._nnet, rnn._RecurrentFamily):
             additions, old_log_probs, old_vals = zip(*outs)
         else:
             old_log_probs, old_vals = zip(*outs)
@@ -206,8 +210,8 @@ class PpoClass(BaseAlgo):
 
         n_returns += n_state_vals
 
-        if n_rewards.ndim == 1 or isinstance(self._nnet, rnn.RecurrentFamily):
-            if isinstance(self._nnet, rnn.RecurrentFamily):
+        if n_rewards.ndim == 1 or isinstance(self._nnet, rnn._RecurrentFamily):
+            if isinstance(self._nnet, rnn._RecurrentFamily):
                 transitions = (numpy.asarray(states), numpy.asarray(actions),
                                numpy.asarray(old_log_probs), numpy.asarray(old_vals), n_returns,
                                numpy.asarray(additions),
@@ -432,6 +436,9 @@ class PpoClass(BaseAlgo):
             approxkl = (.5 * torch.mean((OLDLOGPROBS - t_new_log_probs) ** 2)).item()
             clipfrac = torch.mean((torch.abs(t_ratio - 1.0) > self.CLIPRANGE).float()).item()
 
+        if ADVS.ndimension() < t_ratio.ndimension():
+            ADVS = ADVS.unsqueeze(-1)
+
         # Calculating surrogates
         t_rt1 = ADVS * t_ratio
         t_rt2 = ADVS * torch.clamp(t_ratio,
@@ -565,12 +572,20 @@ class PpoClass(BaseAlgo):
 
 
 class PpoInitializer:
+    betas = (0.99, 0.999)
+    eps = 1e-5
+
     def __init__(self):
         pass
 
+    def config(self, betas: Tuple, eps: float):
+        self.betas = betas
+        self.eps = eps
+        return self
+
     def __call__(self, nn,
-                 observation_space=gym.spaces.Discrete(5),
-                 action_space=gym.spaces.Discrete(5),
+                 observation_space: Space,
+                 action_space: Space,
                  cnfg=None,
                  workers=1,
                  trainer=True):
@@ -579,7 +594,9 @@ class PpoInitializer:
                         action_space,
                         cnfg,
                         workers,
-                        trainer)
+                        trainer,
+                        betas=self.betas,
+                        eps=self.eps)
 
     @staticmethod
     def get_config(env_type):

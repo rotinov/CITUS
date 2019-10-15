@@ -4,7 +4,7 @@ from typing import Dict
 from agnes.common import logger
 from agnes.common.schedules import Saver
 from agnes.nns.initializer import _BaseChooser
-from agnes.algos.base import BaseAlgo
+from agnes.algos.base import _BaseAlgo
 
 import numpy
 import re
@@ -14,7 +14,7 @@ class BaseRunner(abc.ABC):
     logger = logger.ListLogger()
     saver = Saver()
 
-    def __init__(self, env, algo, nn, config: Dict):
+    def __init__(self, env, algo, nn: _BaseChooser, config: Dict):
         env, env_type, vec_num = env
         self.env = env
         self.nn_name = nn.meta
@@ -36,7 +36,7 @@ class BaseRunner(abc.ABC):
                 "device": self.trainer.device_info(),
                 "env_type": self.env_type,
                 "NN type": self.nn_name,
-                "algo": re.split("['.]", str(self.trainer.__class__))[3]
+                "algo": self.trainer.meta
             })
 
     def run(self, log_interval=1):
@@ -49,7 +49,7 @@ class BaseRunner(abc.ABC):
         if self.is_trainer():
             self.saver = Saver(filename, frames_period)
 
-    def _one_log(self, lr_things, epinfobuf, nbatch, tfirststart, tstart, tnow, nupdates):
+    def _one_log(self, lr_things, epinfobuf, nbatch, tfirststart, tstart, tnow, nupdates, stepping_to_learning=None):
         actor_loss, critic_loss, entropy, approxkl, clipfrac, variance, debug = zip(*lr_things)
 
         kvpairs = {
@@ -67,6 +67,9 @@ class BaseRunner(abc.ABC):
             "misc/time_elapsed": (tnow - tfirststart),
             "misc/total_timesteps": self.nsteps * nupdates
         }
+
+        if stepping_to_learning is not None:
+            kvpairs['misc/stepping_to_learning'] = stepping_to_learning
 
         self.logger(kvpairs, nupdates)
 

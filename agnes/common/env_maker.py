@@ -36,25 +36,7 @@ def make_vec_env(env, envs_num=multiprocessing.cpu_count(), config: dict = None)
 
 
 def make_env(env, config: dict = None):
-    if config is not None and "path" in config:
-        if config["path"][-1] != '/':
-            config["path"] = config["path"] + '/'
-
-    if isinstance(env, str):
-        env_type, env_id = get_env_type(env)
-
-        if env_type == 'atari':
-            envs, num_envs = wrap_vec_atari(env_id, envs_num=1, config=config)
-        else:
-            envs, num_envs = wrap_vec_gym(env_id, envs_num=1, config=config)
-    else:
-        envs, num_envs = wrap_vec_custom(env, envs_num=1, config=config)
-        env_type = 'custom'
-
-    if env_type == 'mujoco':
-        envs = VecNormalize(envs)
-
-    return envs, env_type, 1
+    return make_vec_env(env, envs_num=1, config=config)
 
 
 def get_env_type(env: str):
@@ -94,7 +76,7 @@ def wrap_vec_atari(env_name, envs_num=multiprocessing.cpu_count(), config=None):
 
     def make_env(i):
         def _thunk():
-            env = wrap_deepmind(Monitor(make_atari(env_name), filename=config["path"], rank=i, allow_early_resets=False))
+            env = wrap_deepmind(Monitor(make_atari(env_name, max_episode_steps=100000), filename=config["path"], rank=i, allow_early_resets=False))
             return env
 
         return _thunk

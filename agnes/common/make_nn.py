@@ -72,11 +72,7 @@ class CnnBody(nn.Module):
         return self.test_output_shape
 
     def forward(self, x):
-        # (4, 84, 84)
-        cv = self.conv(x)
-        # (64, 7, 7)
-
-        return cv
+        return self.conv(x)
 
 
 class CnnSmallBody(nn.Module):
@@ -113,16 +109,12 @@ class CnnSmallBody(nn.Module):
         return self.test_output_shape
 
     def forward(self, x):
-        # (4, 84, 84)
-        cv = self.conv(x)
-        # (64, 7, 7)
-
-        return cv
+        return self.conv(x)
 
 
-class CnnImpalaSmallBody(nn.Module):
+class CnnImpalaShallowBody(nn.Module):
     def __init__(self, input_shape=(84, 84, 4)):
-        super(CnnImpalaSmallBody, self).__init__()
+        super(CnnImpalaShallowBody, self).__init__()
 
         test_input = torch.rand(input_shape).unsqueeze(0)
 
@@ -148,11 +140,66 @@ class CnnImpalaSmallBody(nn.Module):
         return self.test_output_shape
 
     def forward(self, x):
-        # (4, 84, 84)
-        cv = self.conv(x)
-        # (64, 7, 7)
+        return self.conv(x)
 
-        return cv
+
+class CnnAttentionBody(nn.Module):
+    def __init__(self, input_shape=(84, 84, 4)):
+        super(CnnAttentionBody, self).__init__()
+
+        test_input = torch.rand(input_shape).unsqueeze(0)
+
+        self.conv1 = nn.Sequential(ImagePreprocess(),
+                                   nn.Conv2d(in_channels=input_shape[-1],
+                                             out_channels=16,
+                                             kernel_size=8,
+                                             stride=4,
+                                             padding=0),
+                                   nn.ReLU())
+
+        self.queries_nn = nn.Conv2d(in_channels=16,
+                                    out_channels=32,
+                                    kernel_size=4,
+                                    stride=2,
+                                    padding=0)
+
+        self.keys_nn = nn.Conv2d(in_channels=16,
+                                 out_channels=32,
+                                 kernel_size=4,
+                                 stride=2,
+                                 padding=0)
+
+        self.values_nn = nn.Conv2d(in_channels=16,
+                                   out_channels=32,
+                                   kernel_size=4,
+                                   stride=2,
+                                   padding=0)
+
+        self.sub_nn = nn.Conv2d(in_channels=16,
+                                out_channels=32,
+                                kernel_size=4,
+                                stride=2,
+                                padding=0)
+
+        self.softmax = nn.Softmax(dim=-3)
+
+        test_output = self.forward(test_input)
+        self.test_output_shape = tuple(test_output.shape)
+
+    @property
+    def output_size(self):
+        return self.test_output_shape
+
+    def forward(self, x):
+        conv1_out = self.conv1(x)
+
+        return self.att_forward(conv1_out) + self.sub_nn(conv1_out)
+
+    def att_forward(self, x):
+        queries = self.queries_nn(x)
+        keys = self.keys_nn(x)
+        values = self.values_nn(x)
+        return self.softmax(queries * keys.transpose(-1, -2)) * values * 2
 
 
 class ResidualBlock(nn.Module):
@@ -165,8 +212,7 @@ class ResidualBlock(nn.Module):
                                    nn.Conv2d(channels, channels, 3, stride=1, padding=1))
 
     def forward(self, inp):
-        out = self.block(inp)
-        return out + inp
+        return self.block(inp) + inp
 
 
 def make_one_block(channels_in, channels_out):
@@ -199,11 +245,7 @@ class CnnImpalaBody(nn.Module):
         return self.test_output_shape
 
     def forward(self, x):
-        # (4, 84, 84)
-        cv = self.conv(x)
-        # (64, 7, 7)
-
-        return cv
+        return self.conv(x)
 
 
 class CnnHead(nn.Module):
@@ -216,9 +258,7 @@ class CnnHead(nn.Module):
                           activate_last=activate_last, activation=nn.ReLU)
 
     def forward(self, cv):
-        cv_f = cv.view(-1, self.cnn_out_size)
-
-        return self.fc(cv_f)
+        return self.fc(cv.view(-1, self.cnn_out_size))
 
 
 class Cnn(nn.Module):
@@ -232,7 +272,4 @@ class Cnn(nn.Module):
                          hidden_size=hidden_size, activate_last=activate_last)
 
     def forward(self, x):
-        # (4, 84, 84) -> (64, 7, 7)
-        cv = self.conv(x)
-
-        return self.head(cv)
+        return self.head(self.conv(x))

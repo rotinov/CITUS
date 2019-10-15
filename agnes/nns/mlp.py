@@ -1,26 +1,28 @@
-from abc import ABC
+import abc
 import torch
-import torch.nn as nn
 from torch.distributions import Categorical, Normal
-from agnes.common.init_weights import get_weights_init
-from agnes.nns.base import BasePolicy
 from gym import spaces
 import numpy
 import warnings
-from agnes.common.make_nn import make_fc
+
+from agnes.nns.base import _BasePolicy
+from agnes.common import make_nn
+from agnes.common.init_weights import get_weights_init
 
 
-class MlpFamily(BasePolicy, ABC):
+class _MlpFamily(_BasePolicy, abc.ABC):
     def __init__(self, observation_space: spaces.Space, action_space: spaces.Space):
         super().__init__(observation_space, action_space)
 
-        self.actor_head = make_fc(self.obs_space, self.actions_n, num_layers=3, hidden_size=64)
-        self.critic_head = make_fc(self.obs_space, 1, num_layers=3, hidden_size=64)
+        self.actor_head = make_nn.make_fc(self.obs_space, self.actions_n,
+                                          num_layers=self.layers_num, hidden_size=self.hidden_size)
+        self.critic_head = make_nn.make_fc(self.obs_space, 1,
+                                           num_layers=self.layers_num, hidden_size=self.hidden_size)
 
         self.apply(get_weights_init('tanh'))
 
 
-class MLPDiscrete(MlpFamily):
+class MLPDiscrete(_MlpFamily):
     def forward(self, x):
         if x.ndimension() > 2:
             x = x.view(tuple(x.shape[:-self.obs_space_n]) + (self.obs_space,))
@@ -34,11 +36,11 @@ class MLPDiscrete(MlpFamily):
         return dist, state_value
 
 
-class MLPContinuous(MlpFamily):
+class MLPContinuous(_MlpFamily):
     def __init__(self, observation_space: spaces.Space, action_space: spaces.Space):
         super().__init__(observation_space, action_space)
         logstd = 0.0
-        self.log_std = nn.Parameter(torch.ones(self.actions_n) * logstd)
+        self.log_std = torch.nn.Parameter(torch.ones(self.actions_n) * logstd)
 
     def forward(self, x):
         if x.ndimension() > 2:
