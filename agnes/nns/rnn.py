@@ -12,9 +12,6 @@ from agnes.common.init_weights import get_weights_init
 class _RecurrentFamily(_BasePolicy):
     _hs = None
 
-    def __init__(self, observation_space: spaces.Space, action_space: spaces.Space):
-        super(_RecurrentFamily, self).__init__(observation_space, action_space)
-
     def forward(self, *args):
         return None, None, None
 
@@ -108,7 +105,6 @@ class RNNDiscrete(_RecurrentFamily):
 class RNNContinuous(RNNDiscrete):
     hidden_size = 64
     layers_num = 1
-    is_discrete = False
 
     def __init__(self,
                  observation_space: spaces.Space, action_space: spaces.Space, logstd=0.0):

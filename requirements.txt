@@ -7,5 +7,4 @@ atari_py
 Tensorboard
 numpy
 torch>=1.2
-mpi4py
 opencv-python

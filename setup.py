@@ -6,6 +6,12 @@ if sys.version_info.major != 3:
     print('This Python is only compatible with Python 3, but you are running '
           'Python {}. The installation will likely fail.'.format(sys.version_info.major))
 
+extras = {
+    'distributed': [
+        'mpi4py'
+    ]
+}
+
 setuptools.setup(name='agnes',
                  packages=setuptools.find_packages(),
                  install_requires=[
@@ -14,9 +20,9 @@ setuptools.setup(name='agnes',
                      'Tensorboard',
                      'cloudpickle',
                      'numpy',
-                     'opencv-python',
-                     'mpi4py'
+                     'opencv-python'
                  ],
+                 extras_require=extras,
                  description='AGNES - Flexible Reinforcement Learning Framework with PyTorch',
                  author='Rotinov Egor',
                  url='https://github.com/rotinov/AGNES',

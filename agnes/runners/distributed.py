@@ -1,4 +1,11 @@
-from mpi4py import MPI
+try:
+    from mpi4py import MPI
+except ImportError:
+    raise ImportError("Distributed runner is not available due to the lack of mpi4py package. "
+                      "You can install it by executing "
+                      "'pip install mpi4py' or '"
+                      "pip install agnes[distributed]'") from None
+
 import time
 from torch import cuda
 from collections import deque

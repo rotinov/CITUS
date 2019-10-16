@@ -3,6 +3,7 @@ import numpy
 import random
 from typing import Tuple
 from gym.spaces import Space
+
 from agnes.algos.base import _BaseAlgo, _BaseBuffer
 from agnes.nns.initializer import _BaseChooser
 from agnes.nns import rnn
