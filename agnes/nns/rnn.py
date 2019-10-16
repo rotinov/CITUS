@@ -11,7 +11,7 @@ from agnes.common.init_weights import get_weights_init
 
 class _RecurrentFamily(_BasePolicy):
     _hs = None
-
+    
     def forward(self, *args):
         return None, None, None
 
