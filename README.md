@@ -163,4 +163,4 @@ runner = agnes.Single(env, agnes.PPO, agnes.LSTMCNN)
 
 * **make_env(env, config=None)** is an alias of **make_vec_env** without **envs_num** argument that will be setted to 1.
 
-**Notice: Some plot functions and environment wrappers were taken from [OpenAI Baselines(2017)](https://github.com/openai/baselines).
+**Notice:** Some plot functions and environment wrappers were taken from [OpenAI Baselines(2017)](https://github.com/openai/baselines).
