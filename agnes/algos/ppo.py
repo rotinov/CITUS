@@ -5,6 +5,7 @@ import numpy
 import torch
 from gym.spaces import Space
 
+from agnes.algos.base import LossArgs
 from agnes.algos.a2c import A2cClass, MyDataParallel
 from agnes.algos.configs.ppo_config import get_config
 from agnes.common import schedules, logger
@@ -29,25 +30,25 @@ class PPOLoss(torch.nn.Module):
     def CLIPRANGE(self, VALUE):
         self._CLIPRANGE = VALUE
 
-    def forward(self, t_new_log_probs, t_state_vals, t_entropies,
-                OLDLOGPROBS, OLDVALS, RETURNS, ADVANTAGES) -> Tuple[torch.Tensor, Dict[str, float]]:
+    def forward(self, tensors_storage: LossArgs) -> Tuple[torch.Tensor, Dict[str, float]]:
         # Making critic losses
-        t_state_vals_clipped = OLDVALS + torch.clamp(t_state_vals - OLDVALS,
-                                                     - self._CLIPRANGE,
-                                                     + self._CLIPRANGE)
+        t_state_vals_clipped = tensors_storage.old_vals + torch.clamp(
+            tensors_storage.new_vals - tensors_storage.old_vals,
+            - self._CLIPRANGE, + self._CLIPRANGE
+        )
 
         # Making critic final loss
-        t_critic_loss1 = (t_state_vals - RETURNS).pow(2)
-        t_critic_loss2 = (t_state_vals_clipped - RETURNS).pow(2)
+        t_critic_loss1 = (tensors_storage.new_vals - tensors_storage.returns).pow(2)
+        t_critic_loss2 = (t_state_vals_clipped - tensors_storage.returns).pow(2)
         t_critic_loss = 0.5 * torch.mean(torch.max(t_critic_loss1, t_critic_loss2))
 
         # Calculating ratio
-        t_ratio = torch.exp(t_new_log_probs - OLDLOGPROBS)
+        t_ratio = torch.exp(tensors_storage.new_log_probs - tensors_storage.old_log_probs)
 
-        ADVS = ADVANTAGES.view(t_ratio.shape[:-1] + (-1,))
+        ADVS = tensors_storage.advantages.view(t_ratio.shape[:-1] + (-1,))
 
         with torch.no_grad():
-            approxkl = (.5 * torch.mean((OLDLOGPROBS - t_new_log_probs) ** 2))
+            approxkl = (.5 * torch.mean((tensors_storage.old_log_probs - tensors_storage.new_log_probs) ** 2))
             clipfrac = torch.mean((torch.abs(t_ratio - 1.0) > self._CLIPRANGE).float())
 
         # Calculating surrogates
@@ -57,9 +58,7 @@ class PPOLoss(torch.nn.Module):
                                    1 + self._CLIPRANGE)
         t_actor_loss = - torch.min(t_rt1, t_rt2).mean()
 
-        # print(t_rt1.shape, t_critic_loss2.shape)
-
-        t_entropy = t_entropies.mean()
+        t_entropy = tensors_storage.entropies.mean()
 
         # Making loss for Neural Network
         t_loss = t_actor_loss + self.vf_coef * t_critic_loss - self.ent_coef * t_entropy
@@ -79,6 +78,7 @@ class PpoClass(A2cClass):
     multigpu = False
 
     _nnet: _BasePolicy
+    _lossfun: PPOLoss
 
     def __init__(self, nn: _BaseChooser,
                  observation_space: Space,
@@ -126,9 +126,17 @@ class PpoClass(A2cClass):
         # Getting log probs
         t_new_log_probs = t_distrib.log_prob(data["action"]).view_as(data["old_log_probs"])
 
-        t_loss, stat_from_lr = \
-            self._lossfun(t_new_log_probs, t_state_vals, t_entropies, data["old_log_probs"],
-                          data["old_vals"], data["returns"], data["advantages"])
+        tensors_storage = LossArgs()
+
+        tensors_storage.new_log_probs = t_new_log_probs
+        tensors_storage.old_log_probs = data["old_log_probs"]
+        tensors_storage.advantages = data["advantages"]
+        tensors_storage.new_vals = t_state_vals
+        tensors_storage.old_vals = data["old_vals"]
+        tensors_storage.returns = data["returns"]
+        tensors_storage.entropies = t_entropies
+
+        t_loss, stat_from_lr = self._lossfun(tensors_storage)
 
         # Calculating gradients
         self._optimizer.zero_grad()
@@ -226,8 +234,17 @@ class PpoClass(A2cClass):
 
         self._lossfun.CLIPRANGE = self.CLIPRANGE
 
-        t_loss, stat_from_lr = \
-            self._lossfun(t_new_log_probs, t_state_vals, t_entropies, OLDLOGPROBS, OLDVALS, RETURNS, data["advantages"])
+        tensors_storage = LossArgs()
+
+        tensors_storage.new_log_probs = t_new_log_probs
+        tensors_storage.old_log_probs = OLDLOGPROBS
+        tensors_storage.advantages = data["advantages"]
+        tensors_storage.new_vals = t_state_vals
+        tensors_storage.old_vals = OLDVALS
+        tensors_storage.returns = RETURNS
+        tensors_storage.entropies = t_entropies
+
+        t_loss, stat_from_lr = self._lossfun(tensors_storage)
 
         # Calculating gradients
         self._optimizer.zero_grad()

@@ -10,6 +10,11 @@ torch.backends.cudnn.enabled = True
 
 
 class _BaseBuffer(object):
+    nsteps: int
+
+    def __init__(self, nsteps: int):
+        self.nsteps = nsteps
+
     def append(self, transition):
         pass
 
@@ -21,6 +26,18 @@ class _BaseBuffer(object):
 
     def __len__(self):
         pass
+
+
+class LossArgs:
+    __slots__ = ["new_log_probs", "old_log_probs", "advantages", "new_vals", "old_vals", "returns", "entropies"]
+
+    new_log_probs: torch.Tensor
+    old_log_probs: torch.Tensor
+    advantages: torch.Tensor
+    new_vals: torch.Tensor
+    old_vals: torch.Tensor
+    returns: torch.Tensor
+    entropies: torch.Tensor
 
 
 class _BaseAlgo(abc.ABC):

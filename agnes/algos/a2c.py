@@ -5,7 +5,7 @@ import numpy
 import torch
 from gym.spaces import Space
 
-from agnes.algos.base import _BaseAlgo, _BaseBuffer
+from agnes.algos.base import _BaseAlgo, _BaseBuffer, LossArgs
 from agnes.algos.configs.a2c_config import get_config
 from agnes.common import schedules, logger
 from agnes.nns.rnn import _RecurrentFamily
@@ -14,29 +14,29 @@ from agnes.nns.initializer import _BaseChooser
 
 
 class Buffer(_BaseBuffer):
-    def __init__(self):
-        self.rollouts = []
+    def __init__(self, nsteps):
+        super().__init__(nsteps)
+        self.rollouts = dict()
+        self.offset = 0
+        self.first = True
 
-    def append(self, transition):
-        self.rollouts.append(transition)
+    def append(self, transition: Dict[str, numpy.ndarray]):
+        for key in transition.keys():
+            lnk_to_arr = transition[key]
+            if self.first:
+                self.rollouts[key] = numpy.empty((self.nsteps,) + lnk_to_arr.shape, dtype=lnk_to_arr.dtype)
+            self.rollouts[key][self.offset] = lnk_to_arr
+
+        self.offset += 1
+        self.first = False
 
     def rollout(self):
-        transitions = self.rollouts
-        self.rollouts = []
-
+        transitions = [dict(zip(self.rollouts, t)) for t in zip(*self.rollouts.values())]
+        self.offset = 0
         return list(transitions)
 
-    def learn(self, data, minibatchsize):
-        batches = []
-        for i in range(0, len(data), minibatchsize):
-            one_batch = data[i:min(i + minibatchsize, len(data))]
-
-            batches.append(one_batch)
-
-        return batches
-
     def __len__(self):
-        return len(self.rollouts)
+        return self.offset
 
 
 class A2CLoss(torch.nn.Module):
@@ -45,23 +45,20 @@ class A2CLoss(torch.nn.Module):
         self.vf_coef = vf_coef
         self.ent_coef = ent_coef
 
-    def forward(self, t_new_log_probs, t_state_vals, t_entropies,
-                OLDLOGPROBS, OLDVALS, RETURNS, ADVANTAGES) -> Tuple[torch.Tensor, Dict[str, float]]:
+    def forward(self, tensors_storage: LossArgs) -> Tuple[torch.Tensor, Dict[str, float]]:
         # Making critic final loss
-        t_critic_loss = 0.5 * (t_state_vals - RETURNS).pow(2).mean()
+        t_critic_loss = 0.5 * (tensors_storage.new_vals - tensors_storage.returns).pow(2).mean()
 
-        ADVS = ADVANTAGES.view(t_new_log_probs.shape[:-1] + (-1,))
+        ADVS = tensors_storage.advantages.view(tensors_storage.new_log_probs.shape[:-1] + (-1,))
 
         with torch.no_grad():
-            approxkl = (.5 * torch.mean((OLDLOGPROBS - t_new_log_probs) ** 2))
+            approxkl = (.5 * torch.mean((tensors_storage.old_log_probs - tensors_storage.new_log_probs) ** 2))
 
         # Calculating surrogates
-        t_rt1 = ADVS * t_new_log_probs
+        t_rt1 = ADVS * tensors_storage.new_log_probs
         t_actor_loss = - t_rt1.mean()
 
-        # print(t_rt1.shape, t_critic_loss2.shape)
-
-        t_entropy = t_entropies.mean()
+        t_entropy = tensors_storage.entropies.mean()
 
         # Making loss for Neural Network
         t_loss = t_actor_loss + self.vf_coef * t_critic_loss - self.ent_coef * t_entropy
@@ -91,6 +88,8 @@ class A2cClass(_BaseAlgo):
     multigpu = False
 
     _nnet: _BasePolicy
+    _lossfun: A2CLoss
+    _buffer: Buffer
 
     def __init__(self, nn: _BaseChooser,
                  observation_space: Space,
@@ -154,7 +153,7 @@ class A2cClass(_BaseAlgo):
         else:
             self._nnet.eval()
 
-        self._buffer = Buffer()
+        self._buffer = Buffer(self.nsteps)
 
         self._trainer = trainer
 
@@ -310,9 +309,25 @@ class A2cClass(_BaseAlgo):
         # Getting log probs
         t_new_log_probs = t_distrib.log_prob(data["action"]).view_as(data["old_log_probs"])
 
-        t_loss, stat_from_lr = \
-            self._lossfun(t_new_log_probs, t_state_vals, t_entropies, data["old_log_probs"],
-                          data["old_vals"], data["returns"], data["advantages"])
+        tensors_dict = {
+            "new_log_probs": t_new_log_probs,
+            "old_log_probs": data["old_log_probs"],
+            "advantages": data["advantages"],
+            "new_vals": t_state_vals,
+            "returns": data["returns"],
+            "entropies": t_entropies
+        }
+
+        tensors_storage = LossArgs()
+
+        tensors_storage.new_log_probs = t_new_log_probs
+        tensors_storage.old_log_probs = data["old_log_probs"]
+        tensors_storage.advantages = data["advantages"]
+        tensors_storage.new_vals = t_state_vals
+        tensors_storage.returns = data["returns"]
+        tensors_storage.entropies = t_entropies
+
+        t_loss, stat_from_lr = self._lossfun(tensors_storage)
 
         # Calculating gradients
         self._optimizer.zero_grad()
@@ -402,11 +417,18 @@ class A2cClass(_BaseAlgo):
         t_new_log_probs = t_new_log_probs.view(-1, t_new_log_probs.shape[-1])
 
         OLDLOGPROBS = data["old_log_probs"].view_as(t_new_log_probs)
-        OLDVALS = data["old_vals"].view_as(t_state_vals)
         RETURNS = data["returns"].view_as(t_state_vals)
 
-        t_loss, stat_from_lr = \
-            self._lossfun(t_new_log_probs, t_state_vals, t_entropies, OLDLOGPROBS, OLDVALS, RETURNS, data["advantages"])
+        tensors_storage = LossArgs()
+
+        tensors_storage.new_log_probs = t_new_log_probs
+        tensors_storage.old_log_probs = OLDLOGPROBS
+        tensors_storage.advantages = data["advantages"]
+        tensors_storage.new_vals = t_state_vals
+        tensors_storage.returns = RETURNS
+        tensors_storage.entropies = t_entropies
+
+        t_loss, stat_from_lr = self._lossfun(tensors_storage)
 
         # Calculating gradients
         self._optimizer.zero_grad()
